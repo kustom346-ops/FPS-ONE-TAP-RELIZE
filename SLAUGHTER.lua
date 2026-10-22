@@ -16,7 +16,7 @@ local Camera = Workspace.CurrentCamera
 local RunService = game:GetService("RunService")
 local VirtualInputManager = game:GetService("VirtualInputManager")
 
--- ─── Настройки ───────────────────────────────────────────────────────────────
+-- ─── НАСТРОЙКИ ───────────────────────────────────────────────────────────────
 local Settings = {
     -- AimBot
     AimBotEnabled = false,
@@ -28,9 +28,14 @@ local Settings = {
     SilentEnabled = false,
     SilentPart = "Hitbox_Head",
     
+    -- Rapid Fire
+    RapidFireEnabled = false,
+    BulletsPerShot = 10,
+    UltraAnimations = false,
+    
     -- Общие
     FOV = 200, 
-    VisibleCheckEnabled = true, -- Проверка на стену
+    VisibleCheckEnabled = true,
     
     -- ESP
     ESPEnabled = false,
@@ -38,9 +43,10 @@ local Settings = {
 }
 
 local ESPObjects = {}
+local WeaponConstants = nil
 local fovCircle = Drawing.new("Circle")
 
--- ─── Визуал FOV (Общий) ──────────────────────────────────────────────────────
+-- ─── Визуал FOV ──────────────────────────────────────────────────────────────
 fovCircle.Thickness = 1.5
 fovCircle.NumSides = 60
 fovCircle.Filled = false
@@ -49,7 +55,7 @@ fovCircle.Transparency = 1
 fovCircle.Visible = false
 
 RunService.RenderStepped:Connect(function()
-    if Settings.AimBotEnabled or Settings.SilentEnabled then
+    if Settings.AimBotEnabled or Settings.SilentEnabled or Settings.RapidFireEnabled then
         fovCircle.Position = Vector2.new(Camera.ViewportSize.X / 2, Camera.ViewportSize.Y / 2)
         fovCircle.Radius = Settings.FOV
         fovCircle.Visible = true
@@ -58,7 +64,7 @@ RunService.RenderStepped:Connect(function()
     end
 end)
 
--- ─── Функции ESP ─────────────────────────────────────────────────────────────
+-- ─── ESP ─────────────────────────────────────────────────────────────────────
 local function createESP(model)
     if not model or not model:IsA("Model") or not model:FindFirstChild("Humanoid") then return end
     if ESPObjects[model] then return end
@@ -101,7 +107,7 @@ local function clearAllESP()
     ESPObjects = {}
 end
 
--- ─── Проверка видимости (Wall Check) ─────────────────────────────────────────
+-- ─── Visible Check ───────────────────────────────────────────────────────────
 local function isVisible(targetPart, targetModel)
     if not Settings.VisibleCheckEnabled then return true end
     
@@ -116,7 +122,7 @@ local function isVisible(targetPart, targetModel)
     local direction = (targetPart.Position - origin)
     
     local ray = Workspace:Raycast(origin, direction, rayParams)
-    return ray == nil -- Если луч ни во что не попал, значит цель видна
+    return ray == nil
 end
 
 -- ─── Поиск цели ──────────────────────────────────────────────────────────────
@@ -137,7 +143,6 @@ local function getBestTarget(targetPartName)
         if onScreen then
             local dist = (Vector2.new(screenPos.X, screenPos.Y) - screenCenter).Magnitude
             if dist < shortestDist then
-                -- Проверка видимости
                 if isVisible(targetPart, targetModel) then
                     shortestDist = dist
                     closest = targetPart
@@ -146,7 +151,6 @@ local function getBestTarget(targetPartName)
         end
     end
 
-    -- Игроки
     for _, player in ipairs(Players:GetPlayers()) do
         if player ~= LocalPlayer and player.Character then
             local targetPart = player.Character:FindFirstChild(targetPartName) or player.Character:FindFirstChild("HumanoidRootPart")
@@ -154,7 +158,6 @@ local function getBestTarget(targetPartName)
         end
     end
 
-    -- Боты
     for _, obj in ipairs(Workspace:GetDescendants()) do
         if obj:IsA("Model") and obj:FindFirstChild("Humanoid") then
             local isPlayer = false
@@ -170,7 +173,65 @@ local function getBestTarget(targetPartName)
     return closest
 end
 
--- ─── Хук Silent Aim (FastCast) ───────────────────────────────────────────────
+-- ─── Rapid Fire (Константы) ──────────────────────────────────────────────────
+local function findWeaponConstants()
+    if WeaponConstants then return WeaponConstants end
+    for _, obj in pairs(getgc(true)) do
+        if type(obj) == "table" then
+            if obj.Constants and obj.Constants.DEFAULT_FIRERATE then
+                WeaponConstants = obj.Constants
+                return WeaponConstants
+            end
+        end
+    end
+    return nil
+end
+
+local function setRapidFireConstants(state)
+    local constants = findWeaponConstants()
+    if not constants then return end
+    
+    if state then
+        constants.DEFAULT_FIRERATE = 0
+        constants.DEFAULT_PISTOL_FIRERATE = 0
+        constants.DEFAULT_RELOAD_TIME = 0
+        constants.DEFAULT_PISTOL_RELOAD_TIME = 0
+        constants.DEFAULT_MAGAZINE = 999999
+    else
+        constants.DEFAULT_FIRERATE = 2
+        constants.DEFAULT_PISTOL_FIRERATE = 4
+        constants.DEFAULT_RELOAD_TIME = 0.75
+        constants.DEFAULT_PISTOL_RELOAD_TIME = 0.5
+        constants.DEFAULT_MAGAZINE = 1
+    end
+end
+
+-- ─── Ускорение Анимаций (Обход затвора) ──────────────────────────────────────
+local function speedUpAnimations()
+    if not Settings.UltraAnimations then return end
+    local char = LocalPlayer.Character
+    if not char then return end
+    local humanoid = char:FindFirstChildOfClass("Humanoid")
+    if not humanoid then return end
+    local animator = humanoid:FindFirstChildOfClass("Animator")
+    if not animator then return end
+
+    for _, track in ipairs(animator:GetPlayingAnimationTracks()) do
+        local animName = track.Animation.Name:lower()
+        if animName:find("reload") or animName:find("fire") or animName:find("bolt") or animName:find("shoot") or animName:find("primary") then
+            track:AdjustSpeed(1000) 
+        end
+    end
+end
+
+task.spawn(function()
+    while true do
+        speedUpAnimations()
+        task.wait(0.1)
+    end
+end)
+
+-- ─── Хук FastCast (Silent Aim + Rapid Fire) ──────────────────────────────────
 local function hookFastCast()
     local success, FastCastRedux = pcall(function()
         return require(Workspace.Parent.ReplicatedStorage.Common.Components.FastCastRedux)
@@ -182,22 +243,40 @@ local function hookFastCast()
     
     if originalFire then
         local newFire = function(self, origin, direction, ...)
-            if Settings.SilentEnabled and origin then
+            local extraArgs = table.pack(...)
+            
+            local isLocalShot = false
+            if origin then
                 local distToCamera = (origin - Camera.CFrame.Position).Magnitude
-                if distToCamera < 15 then 
+                if distToCamera < 15 then isLocalShot = true end
+            end
+
+            if isLocalShot then
+                if Settings.SilentEnabled then
                     local target = getBestTarget(Settings.SilentPart)
                     if target then
                         origin = Camera.CFrame.Position
                         direction = (target.Position - origin).Unit
                     end
                 end
+
+                if Settings.RapidFireEnabled then
+                    task.spawn(function()
+                        for i = 1, Settings.BulletsPerShot do
+                            if not Settings.RapidFireEnabled then break end
+                            originalFire(self, origin, direction, table.unpack(extraArgs, 1, extraArgs.n))
+                            task.wait(0.05) 
+                        end
+                    end)
+                    return
+                end
             end
-            return originalFire(self, origin, direction, ...)
+
+            return originalFire(self, origin, direction, table.unpack(extraArgs, 1, extraArgs.n))
         end
         
         if FastCastRedux.Fire then FastCastRedux.Fire = newFire
         elseif FastCastRedux.ActiveCast then FastCastRedux.ActiveCast.Fire = newFire end
-        print("[SLAUGHTER] Silent Aim Hooked successfully!")
         return true
     end
     return false
@@ -225,22 +304,19 @@ local function smartAutoFire()
     if not Settings.AutoFireEnabled then return end
     
     local now = tick()
-    if now - lastFireTime < 0.1 then return end -- Задержка между выстрелами (10 выстрелов в секунду максимум)
+    if now - lastFireTime < 0.1 then return end
     
     local shouldFire = false
     
-    -- Если включен Aimbot, стреляем только когда прицел наведен на цель
     if Settings.AimBotEnabled then
         local aimTarget = getBestTarget(Settings.AimPart)
         if aimTarget then
-            -- Проверяем, что цель находится прямо под прицелом (в пределах 50 пикселей от центра)
             local screenPos = Camera:WorldToViewportPoint(aimTarget.Position)
             local center = Vector2.new(Camera.ViewportSize.X / 2, Camera.ViewportSize.Y / 2)
             if (Vector2.new(screenPos.X, screenPos.Y) - center).Magnitude < 50 then
                 shouldFire = true
             end
         end
-    -- Если включен Silent Aim, стреляем при любой цели в FOV
     elseif Settings.SilentEnabled then
         local silentTarget = getBestTarget(Settings.SilentPart)
         if silentTarget then
@@ -271,138 +347,54 @@ local function startAimBot()
     end)
 end
 
--- ─── Вкладка COMBAT ──────────────────────────────────────────────────────────
-local CombatTab = Window:MakeTab({
-    Name = "COMBAT",
-    Icon = "rbxassetid://4483345998",
-    PremiumOnly = false
-})
+-- ─── UI ──────────────────────────────────────────────────────────────────────
+local CombatTab = Window:MakeTab({ Name = "COMBAT", Icon = "rbxassetid://4483345998" })
 
--- Общие настройки (FOV и Visible Check)
 local CommonSection = CombatTab:AddSection({ Name = "General Settings" })
+CommonSection:AddSlider({ Name = "FOV Radius", Min = 50, Max = 600, Default = 200, Increment = 10, Callback = function(v) Settings.FOV = v end })
+CommonSection:AddToggle({ Name = "Visible Check", Default = true, Callback = function(s) Settings.VisibleCheckEnabled = s end })
+CommonSection:AddToggle({ Name = "Auto Fire", Default = false, Callback = function(s) Settings.AutoFireEnabled = s end })
 
-CommonSection:AddSlider({
-    Name = "FOV Radius (Общий)",
-    Min = 50, Max = 600, Default = 200, Increment = 10,
-    Callback = function(value) Settings.FOV = value end
-})
-
-CommonSection:AddToggle({
-    Name = "Visible Check (Wall Check)",
-    Default = true,
-    Callback = function(state) Settings.VisibleCheckEnabled = state end
-})
-
-CommonSection:AddToggle({
-    Name = "Auto Fire",
-    Default = false,
-    Callback = function(state) Settings.AutoFireEnabled = state end
-})
-
--- AimBot
 local AimSection = CombatTab:AddSection({ Name = "AimBot Settings" })
+AimSection:AddToggle({ Name = "Enable AimBot", Default = false, Callback = function(s) Settings.AimBotEnabled = s; if s then startAimBot() end end })
+AimSection:AddSlider({ Name = "Smoothness", Min = 0, Max = 20, Default = 1, Increment = 1, Callback = function(v) Settings.AimSmoothness = v end })
+AimSection:AddDropdown({ Name = "Target Part", Default = "Head", Options = {"Head", "HumanoidRootPart", "UpperTorso"}, Callback = function(o) Settings.AimPart = o end })
 
-AimSection:AddToggle({
-    Name = "Enable AimBot",
-    Default = false,
-    Callback = function(state)
-        Settings.AimBotEnabled = state
-        if state then startAimBot() end
-    end
-})
-
-AimSection:AddSlider({
-    Name = "Smoothness",
-    Min = 0, Max = 20, Default = 1, Increment = 1,
-    Callback = function(value) Settings.AimSmoothness = value end
-})
-
-AimSection:AddDropdown({
-    Name = "Target Part",
-    Default = "Head",
-    Options = {"Head", "HumanoidRootPart", "UpperTorso"},
-    Callback = function(option) Settings.AimPart = option end
-})
-
--- Silent Aim
 local SilentSection = CombatTab:AddSection({ Name = "Silent Aim Settings" })
+SilentSection:AddToggle({ Name = "Enable Silent Aim", Default = false, Callback = function(s) Settings.SilentEnabled = s end })
+SilentSection:AddDropdown({ Name = "Silent Target Part", Default = "Hitbox_Head", Options = {"Hitbox_Head", "Head", "HumanoidRootPart"}, Callback = function(o) Settings.SilentPart = o end })
 
-SilentSection:AddToggle({
-    Name = "Enable Silent Aim",
-    Default = false,
-    Callback = function(state) Settings.SilentEnabled = state end
-})
+local RapidSection = CombatTab:AddSection({ Name = "Rapid Fire Settings" })
+RapidSection:AddToggle({ Name = "Enable Rapid Fire (Constants)", Default = false, Callback = function(s) Settings.RapidFireEnabled = s; setRapidFireConstants(s) end })
+RapidSection:AddToggle({ Name = "Enable Ultra Animations (Bolt)", Default = false, Callback = function(s) Settings.UltraAnimations = s end })
+RapidSection:AddSlider({ Name = "Bullets Per Shot (Spam)", Min = 1, Max = 50, Default = 10, Increment = 1, Callback = function(v) Settings.BulletsPerShot = v end })
 
-SilentSection:AddDropdown({
-    Name = "Silent Target Part",
-    Default = "Hitbox_Head",
-    Options = {"Hitbox_Head", "Head", "HumanoidRootPart"},
-    Callback = function(option) Settings.SilentPart = option end
-})
-
--- ─── Вкладка ESP ─────────────────────────────────────────────────────────────
-local ESPTab = Window:MakeTab({
-    Name = "ESP",
-    Icon = "rbxassetid://3947051614",
-    PremiumOnly = false
-})
-
+local ESPTab = Window:MakeTab({ Name = "ESP", Icon = "rbxassetid://3947051614" })
 local ESPSection = ESPTab:AddSection({ Name = "ESP Settings" })
-
-ESPSection:AddToggle({
-    Name = "Enable ESP",
-    Default = false,
-    Callback = function(state)
-        Settings.ESPEnabled = state
-        if state then
-            updateESP()
-            task.spawn(function()
-                while Settings.ESPEnabled do
-                    task.wait(1)
-                    updateESP()
-                end
-            end)
-        else
-            clearAllESP()
-        end
+ESPSection:AddToggle({ Name = "Enable ESP", Default = false, Callback = function(s)
+    Settings.ESPEnabled = s
+    if s then updateESP(); task.spawn(function() while Settings.ESPEnabled do task.wait(1); updateESP() end end) else clearAllESP() end
+end })
+ESPSection:AddColorpicker({ Name = "ESP Color", Default = Color3.fromRGB(255, 0, 0), Callback = function(c)
+    Settings.ESPColor = c
+    for model, highlight in pairs(ESPObjects) do
+        if highlight and highlight.Parent then highlight.FillColor = c; highlight.OutlineColor = c end
     end
-})
+end })
 
-ESPSection:AddColorpicker({
-    Name = "ESP Color",
-    Default = Color3.fromRGB(255, 0, 0),
-    Callback = function(color)
-        Settings.ESPColor = color
-        for model, highlight in pairs(ESPObjects) do
-            if highlight and highlight.Parent then
-                highlight.FillColor = color
-                highlight.OutlineColor = color
-            end
-        end
-    end
-})
-
--- ─── Вкладка SETTINGS ────────────────────────────────────────────────────────
-local SettingsTab = Window:MakeTab({
-    Name = "SETTINGS",
-    Icon = "rbxassetid://3947051614",
-    PremiumOnly = false
-})
-
+local SettingsTab = Window:MakeTab({ Name = "SETTINGS", Icon = "rbxassetid://3947051614" })
 local SettingsSection = SettingsTab:AddSection({ Name = "Actions" })
+SettingsSection:AddButton({ Name = "UNLOAD SCRIPT", Callback = function()
+    Settings.AimBotEnabled = false
+    Settings.ESPEnabled = false
+    Settings.SilentEnabled = false
+    Settings.AutoFireEnabled = false
+    Settings.RapidFireEnabled = false
+    Settings.UltraAnimations = false
+    setRapidFireConstants(false)
+    clearAllESP()
+    if fovCircle then fovCircle:Remove() end
+    OrionLib:Destroy()
+end })
 
-SettingsSection:AddButton({
-    Name = "UNLOAD SCRIPT",
-    Callback = function()
-        Settings.AimBotEnabled = false
-        Settings.ESPEnabled = false
-        Settings.SilentEnabled = false
-        Settings.AutoFireEnabled = false
-        clearAllESP()
-        if fovCircle then fovCircle:Remove() end
-        OrionLib:Destroy()
-    end
-})
-
--- Инициализация
 OrionLib:Init()
