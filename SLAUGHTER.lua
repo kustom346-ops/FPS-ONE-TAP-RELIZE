@@ -1,5 +1,5 @@
 -- Загружаем OrionLib
-local OrionLib = loadstring(game:HttpGet('https://raw.githubusercontent.com/shlexware/Orion/main/source'))()
+local OrionLib = loadstring(game:HttpGet("https://raw.githubusercontent.com/Qanuir/orion-ui/refs/heads/main/source.lua"))()
 
 -- Создаём окно SLAUGHTER
 local Window = OrionLib:MakeWindow({
