@@ -6,7 +6,8 @@ local Window = OrionLib:MakeWindow({
     Name = "SLAUGHTER",
     HidePremium = false,
     SaveConfig = false,
-    ConfigFolder = "SlaughterConfig"
+    ConfigFolder = "SlaughterConfig",
+    Size = UDim2.fromOffset(600, 500) -- Окно побольше, чтобы все вкладки влезли
 })
 
 local Players = game:GetService("Players")
@@ -43,10 +44,16 @@ local Settings = {
     -- ESP
     ESPEnabled = false,
     ESPColor = Color3.fromRGB(255, 0, 0),
+
+    -- HITBOX EXPANDER
+    HitboxEnabled = false,
+    HitboxSize = 10.0,          -- от 5 до 30
+    HitboxTransparency = 0.7,
 }
 
 local ESPObjects = {}
 local WeaponConstants = nil
+local OriginalHitboxes = {} -- Запоминаем оригинальные размеры
 
 -- ─── FOV Circle ──────────────────────────────────────────────────────────────
 local fovCircle = Drawing.new("Circle")
@@ -75,7 +82,6 @@ local function getPlayerCharacterSet()
             set[player.Character] = true
         end
     end
-    -- Свой персонаж тоже в set — чтобы NPC-цикл его не подхватил
     if LocalPlayer.Character then
         set[LocalPlayer.Character] = true
     end
@@ -155,12 +161,8 @@ local function isVisible(targetPart, targetModel)
     return ray == nil
 end
 
--- ─── Поиск цели (с кэшем на 1 кадр) ─────────────────────────────────────────
-local targetCache = {
-    part = nil,
-    time = 0,
-    result = nil,
-}
+-- ─── Поиск цели ─────────────────────────────────────────────────────────────
+local targetCache = { part = nil, time = 0, result = nil }
 
 local function getBestTarget(targetPartName)
     local now = tick()
@@ -184,7 +186,6 @@ local function getBestTarget(targetPartName)
 
     local function checkTarget(targetPart, targetModel)
         if not targetPart or not targetPart.Parent then return end
-        -- Себя не таргетим
         if targetModel == LocalPlayer.Character then return end
         if targetPart:IsDescendantOf(LocalPlayer.Character) then return end
         local humanoid = targetModel:FindFirstChild("Humanoid")
@@ -280,7 +281,7 @@ task.spawn(function()
     end
 end)
 
--- ─── Хук FastCast (Silent Aim + Spam) ───────────────────────────────────────
+-- ─── Хук FastCast ───────────────────────────────────────────────────────────
 local function hookFastCast()
     local success, FastCastRedux = pcall(function()
         return require(Workspace.Parent.ReplicatedStorage.Common.Components.FastCastRedux)
@@ -333,17 +334,15 @@ task.spawn(function()
     while not hookFastCast() do task.wait(2) end
 end)
 
--- ─── AimBot & AutoFire (ИСПРАВЛЕНО) ─────────────────────────────────────────
+-- ─── AimBot & AutoFire ──────────────────────────────────────────────────────
 local aimConnection = nil
 local lastFireTime = 0
 
--- Угол между LookVector двух CFrame в градусах
 local function getAngleDelta(fromCF, toCF)
     local dot = math.clamp(fromCF.LookVector:Dot(toCF.LookVector), -1, 1)
     return math.deg(math.acos(dot))
 end
 
--- Плавный поворот камеры с учётом dt (не зависит от FPS)
 local function aimAt(target, dt)
     local desired = CFrame.new(Camera.CFrame.Position, target.Position)
 
@@ -352,12 +351,7 @@ local function aimAt(target, dt)
         return
     end
 
-    -- Smoothness = 1  → ~720°/сек (очень быстро)
-    -- Smoothness = 5  → ~144°/сек
-    -- Smoothness = 10 → ~72°/сек
-    -- Smoothness = 20 → ~36°/сек
     local speedDegPerSec = 720 / Settings.AimSmoothness
-
     local angle = getAngleDelta(Camera.CFrame, desired)
     if angle < 0.1 then
         Camera.CFrame = desired
@@ -368,7 +362,6 @@ local function aimAt(target, dt)
     Camera.CFrame = Camera.CFrame:Lerp(desired, step)
 end
 
--- AutoFire: стреляет только если цель уже в прицеле
 local function smartAutoFire(aimTarget)
     if not Settings.AutoFireEnabled then return end
     if not aimTarget then return end
@@ -404,7 +397,7 @@ end
 
 startAimBot()
 
--- AutoFire для Silent без AimBot (отдельный тред, 20 Гц)
+-- AutoFire для Silent без AimBot
 task.spawn(function()
     while task.wait(0.05) do
         if Settings.AutoFireEnabled and Settings.SilentEnabled and not Settings.AimBotEnabled then
@@ -418,11 +411,119 @@ task.spawn(function()
     end
 end)
 
+-- ═══════════════════════════════════════════════════════════════════════════
+-- HITBOX EXPANDER (Только для голов, не морозит)
+-- ═══════════════════════════════════════════════════════════════════════════
+local function applyHitbox(part, expand)
+    if not part or not part:IsA("BasePart") then return end
+
+    if expand then
+        if not OriginalHitboxes[part] then
+            OriginalHitboxes[part] = {
+                Size = part.Size,
+                Transparency = part.Transparency,
+                CanCollide = part.CanCollide,
+                Massless = part.Massless,
+            }
+        end
+        
+        -- 1. Отключаем физику
+        part.CanCollide = false
+        part.Massless = true
+        
+        -- 2. Меняем размер и прозрачность
+        part.Size = OriginalHitboxes[part].Size * Settings.HitboxSize
+        part.Transparency = Settings.HitboxTransparency
+        
+    else
+        local orig = OriginalHitboxes[part]
+        if orig then
+            part.Size = orig.Size
+            part.Transparency = orig.Transparency
+            part.CanCollide = orig.CanCollide
+            part.Massless = orig.Massless
+            OriginalHitboxes[part] = nil
+        end
+    end
+end
+
+local function updateHitboxes()
+    if not Settings.HitboxEnabled then return end
+    local playerSet = getPlayerCharacterSet()
+
+    -- Игроки
+    for _, player in ipairs(Players:GetPlayers()) do
+        if player ~= LocalPlayer and player.Character then
+            local part = player.Character:FindFirstChild("Hitbox_Head") or player.Character:FindFirstChild("Head")
+            if part then applyHitbox(part, true) end
+        end
+    end
+
+    -- Боты
+    for _, obj in ipairs(Workspace:GetDescendants()) do
+        if obj:IsA("Model") and obj:FindFirstChild("Humanoid") and not playerSet[obj] and obj ~= LocalPlayer.Character then
+            local part = obj:FindFirstChild("Hitbox_Head") or obj:FindFirstChild("Head")
+            if part then applyHitbox(part, true) end
+        end
+    end
+end
+
+local function restoreAllHitboxes()
+    for part, _ in pairs(OriginalHitboxes) do
+        applyHitbox(part, false)
+    end
+    OriginalHitboxes = {}
+end
+
+task.spawn(function()
+    while task.wait(0.5) do
+        if Settings.HitboxEnabled then
+            updateHitboxes()
+        end
+    end
+end)
+
+-- ═══════════════════════════════════════════════════════════════════════════
+-- INSTANT RESPAWN
+-- ═══════════════════════════════════════════════════════════════════════════
+local InstantRespawnEnabled = false
+local respawnConnection = nil
+local lastRespawnTime = 0
+
+local function setInstantRespawn(state)
+    InstantRespawnEnabled = state
+    
+    if respawnConnection then
+        respawnConnection:Disconnect()
+        respawnConnection = nil
+    end
+    
+    if state then
+        respawnConnection = RunService.Heartbeat:Connect(function()
+            local char = LocalPlayer.Character
+            if not char then return end
+            local humanoid = char:FindFirstChildOfClass("Humanoid")
+            
+            -- Если мы мертвы и прошло больше 0.3 секунды с прошлого раза
+            if humanoid and humanoid.Health <= 0 and (tick() - lastRespawnTime) > 0.3 then
+                lastRespawnTime = tick()
+                
+                -- Нажимаем ПРОБЕЛ для вызова системного респавна (как кнопка "Возродиться")
+                VirtualInputManager:SendKeyEvent(true, Enum.KeyCode.Space, false, game)
+                task.wait(0.01)
+                VirtualInputManager:SendKeyEvent(false, Enum.KeyCode.Space, false, game)
+            end
+        end)
+    end
+end
+
 -- ─── BHop ────────────────────────────────────────────────────────────────────
 local BHopEnabled = false
 local BHopTargetSpeed = 49
+local BHopJumpPower = 0      -- 0 = стандартный прыжок
 local BHopJumping = false
 local originalWalkSpeed = nil
+local originalJumpPower = nil
 
 UserInputService.InputBegan:Connect(function(input, gameProcessed)
     if gameProcessed then return end
@@ -452,12 +553,19 @@ local bhopConnection = RunService.Heartbeat:Connect(function()
     if not originalWalkSpeed then
         originalWalkSpeed = humanoid.WalkSpeed
     end
+    if not originalJumpPower then
+        originalJumpPower = humanoid.JumpPower
+    end
 
     humanoid.WalkSpeed = BHopTargetSpeed
+    
+    if BHopJumpPower > 0 then
+        humanoid.JumpPower = BHopJumpPower
+        humanoid.UseJumpPower = true
+    else
+        humanoid.JumpPower = originalJumpPower
+    end
 
-    -- Прыгаем только если зажат пробел и персонаж на земле.
-    -- Никаких VirtualInputManager — они отпускают реальный пробел
-    -- и ломают InputEnded/InputBegan.
     if BHopJumping and humanoid.FloorMaterial ~= Enum.Material.Air then
         humanoid.Jump = true
     end
@@ -469,11 +577,17 @@ local function setBHop(state)
         local char = LocalPlayer.Character
         if char then
             local humanoid = char:FindFirstChildOfClass("Humanoid")
-            if humanoid and originalWalkSpeed then
-                humanoid.WalkSpeed = originalWalkSpeed
+            if humanoid then
+                if originalWalkSpeed then
+                    humanoid.WalkSpeed = originalWalkSpeed
+                end
+                if originalJumpPower then
+                    humanoid.JumpPower = originalJumpPower
+                end
             end
         end
         originalWalkSpeed = nil
+        originalJumpPower = nil
         BHopJumping = false
     end
 end
@@ -533,21 +647,39 @@ end })
 
 -- ─── UI: MISC ────────────────────────────────────────────────────────────────
 local MiscTab = Window:MakeTab({ Name = "MISC", Icon = "rbxassetid://4483345998" })
+
 local BHopSection = MiscTab:AddSection({ Name = "BunnyHop" })
-
-BHopSection:AddToggle({
-    Name = "Enable BunnyHop",
-    Default = false,
-    Callback = function(state) setBHop(state) end
-})
-
-BHopSection:AddSlider({
-    Name = "Max Speed",
-    Min = 10, Max = 100, Default = 49, Increment = 1,
-    Callback = function(v) BHopTargetSpeed = v end
-})
-
+BHopSection:AddToggle({ Name = "Enable BunnyHop", Default = false, Callback = function(state) setBHop(state) end })
+BHopSection:AddSlider({ Name = "Max Speed", Min = 10, Max = 100, Default = 49, Increment = 1, Callback = function(v) BHopTargetSpeed = v end })
+BHopSection:AddSlider({ Name = "Jump Power (0 = Normal)", Min = 0, Max = 200, Default = 0, Increment = 5, Callback = function(v) BHopJumpPower = v end })
 BHopSection:AddLabel("Зажми ПРОБЕЛ — разгон до Max Speed и стоп выше.")
+
+local HitboxSection = MiscTab:AddSection({ Name = "Hitbox Expander" })
+HitboxSection:AddToggle({ 
+    Name = "Enable Hitbox Expander", 
+    Default = false, 
+    Callback = function(s)
+        Settings.HitboxEnabled = s
+        if not s then restoreAllHitboxes() end
+    end 
+})
+HitboxSection:AddSlider({ 
+    Name = "Head Size", 
+    Min = 5.0, Max = 30.0, Default = 10.0, Increment = 1.0, 
+    Callback = function(v) Settings.HitboxSize = v end 
+})
+HitboxSection:AddSlider({ 
+    Name = "Transparency", 
+    Min = 0.0, Max = 1.0, Default = 0.7, Increment = 0.1, 
+    Callback = function(v) Settings.HitboxTransparency = v end 
+})
+
+local RespawnSection = MiscTab:AddSection({ Name = "Respawn" })
+RespawnSection:AddToggle({ 
+    Name = "Instant Respawn", 
+    Default = false, 
+    Callback = function(s) setInstantRespawn(s) end 
+})
 
 -- ─── UI: SETTINGS ────────────────────────────────────────────────────────────
 local SettingsTab = Window:MakeTab({ Name = "SETTINGS", Icon = "rbxassetid://6031094667" })
@@ -561,18 +693,31 @@ SettingsSection:AddButton({ Name = "UNLOAD SCRIPT", Callback = function()
     Settings.RapidFireConstantsEnabled = false
     Settings.RapidFireSpamEnabled = false
     Settings.UltraAnimations = false
+    Settings.HitboxEnabled = false
     BHopEnabled = false
+    InstantRespawnEnabled = false
 
     setRapidFireConstants(false)
     clearAllESP()
+    restoreAllHitboxes()
+    setInstantRespawn(false)
 
     if aimConnection then aimConnection:Disconnect() end
     setBHop(false)
+    
+    -- Сброс JumpPower на случай, если setBHop не успел
+    if LocalPlayer.Character then
+        local hum = LocalPlayer.Character:FindFirstChildOfClass("Humanoid")
+        if hum and originalJumpPower then
+            hum.JumpPower = originalJumpPower
+        end
+    end
+
     if bhopConnection then bhopConnection:Disconnect() end
     if fovCircle then fovCircle:Remove() end
 
     OrionLib:Destroy()
 end })
 
--- ─── INIT ВСЕГДА ПОСЛЕДНИМ ───────────────────────────────────────────────────
+-- ─── INIT ────────────────────────────────────────────────────────────────────
 OrionLib:Init()
