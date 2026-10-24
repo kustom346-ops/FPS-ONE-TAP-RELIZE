@@ -1,13 +1,11 @@
--- Загружаем OrionLib
 local OrionLib = loadstring(game:HttpGet("https://raw.githubusercontent.com/Qanuir/orion-ui/refs/heads/main/source.lua"))()
 
--- Создаём окно SLAUGHTER
 local Window = OrionLib:MakeWindow({
     Name = "SLAUGHTER",
     HidePremium = false,
     SaveConfig = false,
     ConfigFolder = "SlaughterConfig",
-    Size = UDim2.fromOffset(600, 500) -- Окно побольше, чтобы все вкладки влезли
+    Size = UDim2.fromOffset(600, 500)
 })
 
 local Players = game:GetService("Players")
@@ -19,44 +17,31 @@ local VirtualInputManager = game:GetService("VirtualInputManager")
 local UserInputService = game:GetService("UserInputService")
 local SoundService = game:GetService("SoundService")
 
--- ─── НАСТРОЙКИ ───────────────────────────────────────────────────────────────
 local Settings = {
-    -- AimBot
     AimBotEnabled = false,
     AimSmoothness = 1,
     AutoFireEnabled = false,
     AimPart = "Head",
-
-    -- Silent
     SilentEnabled = false,
     SilentPart = "Hitbox_Head",
-
-    -- Rapid Fire
     RapidFireConstantsEnabled = false,
     RapidFireSpamEnabled = false,
     BulletsPerShot = 10,
     UltraAnimations = false,
-
-    -- Общие
     FOV = 200,
     VisibleCheckEnabled = true,
     MaxTargetDistance = 1000,
-
-    -- ESP
     ESPEnabled = false,
     ESPColor = Color3.fromRGB(255, 0, 0),
-
-    -- HITBOX EXPANDER
     HitboxEnabled = false,
-    HitboxSize = 10.0,          -- от 5 до 30
+    HitboxSize = 10.0,
     HitboxTransparency = 0.7,
 }
 
 local ESPObjects = {}
 local WeaponConstants = nil
-local OriginalHitboxes = {} -- Запоминаем оригинальные размеры
+local OriginalHitboxes = {}
 
--- ─── FOV Circle ──────────────────────────────────────────────────────────────
 local fovCircle = Drawing.new("Circle")
 fovCircle.Thickness = 1.5
 fovCircle.NumSides = 60
@@ -75,7 +60,6 @@ RunService.RenderStepped:Connect(function()
     end
 end)
 
--- ─── Хелпер: Set персонажей игроков ─────────────────────────────────────────
 local function getPlayerCharacterSet()
     local set = {}
     for _, player in ipairs(Players:GetPlayers()) do
@@ -89,7 +73,6 @@ local function getPlayerCharacterSet()
     return set
 end
 
--- ─── ESP ─────────────────────────────────────────────────────────────────────
 local function createESP(model)
     if not model or not model:IsA("Model") or not model:FindFirstChild("Humanoid") then return end
     if ESPObjects[model] then return end
@@ -142,7 +125,6 @@ local function clearAllESP()
     ESPObjects = {}
 end
 
--- ─── Visible Check ───────────────────────────────────────────────────────────
 local function isVisible(targetPart, targetModel)
     if not Settings.VisibleCheckEnabled then return true end
 
@@ -162,7 +144,6 @@ local function isVisible(targetPart, targetModel)
     return ray == nil
 end
 
--- ─── Поиск цели ─────────────────────────────────────────────────────────────
 local targetCache = { part = nil, time = 0, result = nil }
 
 local function getBestTarget(targetPartName)
@@ -224,7 +205,6 @@ local function getBestTarget(targetPartName)
     return closest
 end
 
--- ─── Rapid Fire: Константы ──────────────────────────────────────────────────
 local function findWeaponConstants()
     if WeaponConstants then return WeaponConstants end
     for _, obj in pairs(getgc(true)) do
@@ -257,7 +237,6 @@ local function setRapidFireConstants(state)
     end
 end
 
--- ─── Ускорение анимаций ─────────────────────────────────────────────────────
 local function speedUpAnimations()
     local char = LocalPlayer.Character
     if not char then return end
@@ -282,7 +261,6 @@ task.spawn(function()
     end
 end)
 
--- ─── Хук FastCast ───────────────────────────────────────────────────────────
 local function hookFastCast()
     local success, FastCastRedux = pcall(function()
         return require(Workspace.Parent.ReplicatedStorage.Common.Components.FastCastRedux)
@@ -335,7 +313,6 @@ task.spawn(function()
     while not hookFastCast() do task.wait(2) end
 end)
 
--- ─── AimBot & AutoFire ──────────────────────────────────────────────────────
 local aimConnection = nil
 local lastFireTime = 0
 
@@ -398,7 +375,6 @@ end
 
 startAimBot()
 
--- AutoFire для Silent без AimBot
 task.spawn(function()
     while task.wait(0.05) do
         if Settings.AutoFireEnabled and Settings.SilentEnabled and not Settings.AimBotEnabled then
@@ -412,9 +388,6 @@ task.spawn(function()
     end
 end)
 
--- ═══════════════════════════════════════════════════════════════════════════
--- HITBOX EXPANDER (Только для голов, не морозит)
--- ═══════════════════════════════════════════════════════════════════════════
 local function applyHitbox(part, expand)
     if not part or not part:IsA("BasePart") then return end
 
@@ -427,15 +400,12 @@ local function applyHitbox(part, expand)
                 Massless = part.Massless,
             }
         end
-        
-        -- 1. Отключаем физику
+
         part.CanCollide = false
         part.Massless = true
-        
-        -- 2. Меняем размер и прозрачность
         part.Size = OriginalHitboxes[part].Size * Settings.HitboxSize
         part.Transparency = Settings.HitboxTransparency
-        
+
     else
         local orig = OriginalHitboxes[part]
         if orig then
@@ -452,7 +422,6 @@ local function updateHitboxes()
     if not Settings.HitboxEnabled then return end
     local playerSet = getPlayerCharacterSet()
 
-    -- Игроки
     for _, player in ipairs(Players:GetPlayers()) do
         if player ~= LocalPlayer and player.Character then
             local part = player.Character:FindFirstChild("Hitbox_Head") or player.Character:FindFirstChild("Head")
@@ -460,7 +429,6 @@ local function updateHitboxes()
         end
     end
 
-    -- Боты
     for _, obj in ipairs(Workspace:GetDescendants()) do
         if obj:IsA("Model") and obj:FindFirstChild("Humanoid") and not playerSet[obj] and obj ~= LocalPlayer.Character then
             local part = obj:FindFirstChild("Hitbox_Head") or obj:FindFirstChild("Head")
@@ -484,32 +452,27 @@ task.spawn(function()
     end
 end)
 
--- ═══════════════════════════════════════════════════════════════════════════
--- INSTANT RESPAWN
--- ═══════════════════════════════════════════════════════════════════════════
 local InstantRespawnEnabled = false
 local respawnConnection = nil
 local lastRespawnTime = 0
 
 local function setInstantRespawn(state)
     InstantRespawnEnabled = state
-    
+
     if respawnConnection then
         respawnConnection:Disconnect()
         respawnConnection = nil
     end
-    
+
     if state then
         respawnConnection = RunService.Heartbeat:Connect(function()
             local char = LocalPlayer.Character
             if not char then return end
             local humanoid = char:FindFirstChildOfClass("Humanoid")
-            
-            -- Если мы мертвы и прошло больше 0.3 секунды с прошлого раза
+
             if humanoid and humanoid.Health <= 0 and (tick() - lastRespawnTime) > 0.3 then
                 lastRespawnTime = tick()
-                
-                -- Нажимаем ПРОБЕЛ для вызова системного респавна (как кнопка "Возродиться")
+
                 VirtualInputManager:SendKeyEvent(true, Enum.KeyCode.Space, false, game)
                 task.wait(0.01)
                 VirtualInputManager:SendKeyEvent(false, Enum.KeyCode.Space, false, game)
@@ -518,10 +481,9 @@ local function setInstantRespawn(state)
     end
 end
 
--- ─── BHop ────────────────────────────────────────────────────────────────────
 local BHopEnabled = false
 local BHopTargetSpeed = 49
-local BHopJumpPower = 0      -- 0 = стандартный прыжок
+local BHopJumpPower = 0
 local BHopJumping = false
 local originalWalkSpeed = nil
 local originalJumpPower = nil
@@ -559,7 +521,7 @@ local bhopConnection = RunService.Heartbeat:Connect(function()
     end
 
     humanoid.WalkSpeed = BHopTargetSpeed
-    
+
     if BHopJumpPower > 0 then
         humanoid.JumpPower = BHopJumpPower
         humanoid.UseJumpPower = true
@@ -593,9 +555,6 @@ local function setBHop(state)
     end
 end
 
--- ═══════════════════════════════════════════════════════════════════════════
--- KILL SOUND SYSTEM
--- ═══════════════════════════════════════════════════════════════════════════
 local KillSoundEnabled = false
 local killSoundConnection = nil
 
@@ -606,32 +565,30 @@ local ORIGINAL_HEADSHOT_ID = "75228431293068"
 
 local myKillSound = Instance.new("Sound")
 myKillSound.SoundId = CUSTOM_KILL_ID
-myKillSound.Volume = 2 
+myKillSound.Volume = 2
 myKillSound.Parent = SoundService
 
 local myHeadshotSound = Instance.new("Sound")
 myHeadshotSound.SoundId = CUSTOM_HEADSHOT_ID
-myHeadshotSound.Volume = 2 
+myHeadshotSound.Volume = 2
 myHeadshotSound.Parent = SoundService
 
 local function handleNewSound(sound)
     if not sound:IsA("Sound") then return end
-    
+
     local isKill = string.find(sound.SoundId, ORIGINAL_KILL_ID)
     local isHeadshot = string.find(sound.SoundId, ORIGINAL_HEADSHOT_ID)
-    
+
     if isKill or isHeadshot then
         sound.Volume = 0
         sound.Playing = false
-        
+
         if isKill then
             myKillSound:Play()
-            print("Перехвачен звук УБИЙСТВА!")
         elseif isHeadshot then
             myHeadshotSound:Play()
-            print("Перехвачен звук ХЕДШОТА!")
         end
-        
+
         task.delay(1, function()
             if sound and sound.Parent then sound:Destroy() end
         end)
@@ -640,12 +597,12 @@ end
 
 local function setKillSound(state)
     KillSoundEnabled = state
-    
+
     if killSoundConnection then
         killSoundConnection:Disconnect()
         killSoundConnection = nil
     end
-    
+
     if state then
         killSoundConnection = game.DescendantAdded:Connect(function(obj)
             if obj:IsA("Sound") then
@@ -658,7 +615,6 @@ local function setKillSound(state)
     end
 end
 
--- ─── UI: COMBAT ──────────────────────────────────────────────────────────────
 local CombatTab = Window:MakeTab({ Name = "COMBAT", Icon = "rbxassetid://4483345998" })
 
 local CommonSection = CombatTab:AddSection({ Name = "General Settings" })
@@ -682,7 +638,6 @@ RapidSection:AddToggle({ Name = "Multi-Bullet Spam (Hook)", Default = false, Cal
 RapidSection:AddToggle({ Name = "Ultra Animations (Bolt)", Default = false, Callback = function(s) Settings.UltraAnimations = s end })
 RapidSection:AddSlider({ Name = "Bullets Per Shot (Spam)", Min = 1, Max = 50, Default = 10, Increment = 1, Callback = function(v) Settings.BulletsPerShot = v end })
 
--- ─── UI: ESP ─────────────────────────────────────────────────────────────────
 local ESPTab = Window:MakeTab({ Name = "ESP", Icon = "rbxassetid://3947051614" })
 local ESPSection = ESPTab:AddSection({ Name = "ESP Settings" })
 
@@ -711,7 +666,6 @@ ESPSection:AddColorpicker({ Name = "ESP Color", Default = Color3.fromRGB(255, 0,
     end
 end })
 
--- ─── UI: MISC ────────────────────────────────────────────────────────────────
 local MiscTab = Window:MakeTab({ Name = "MISC", Icon = "rbxassetid://4483345998" })
 
 local BHopSection = MiscTab:AddSection({ Name = "BunnyHop" })
@@ -721,41 +675,39 @@ BHopSection:AddSlider({ Name = "Jump Power (0 = Normal)", Min = 0, Max = 200, De
 BHopSection:AddLabel("Зажми ПРОБЕЛ — разгон до Max Speed и стоп выше.")
 
 local HitboxSection = MiscTab:AddSection({ Name = "Hitbox Expander" })
-HitboxSection:AddToggle({ 
-    Name = "Enable Hitbox Expander", 
-    Default = false, 
+HitboxSection:AddToggle({
+    Name = "Enable Hitbox Expander",
+    Default = false,
     Callback = function(s)
         Settings.HitboxEnabled = s
         if not s then restoreAllHitboxes() end
-    end 
+    end
 })
-HitboxSection:AddSlider({ 
-    Name = "Head Size", 
-    Min = 5.0, Max = 30.0, Default = 10.0, Increment = 1.0, 
-    Callback = function(v) Settings.HitboxSize = v end 
+HitboxSection:AddSlider({
+    Name = "Head Size",
+    Min = 5.0, Max = 30.0, Default = 10.0, Increment = 1.0,
+    Callback = function(v) Settings.HitboxSize = v end
 })
-HitboxSection:AddSlider({ 
-    Name = "Transparency", 
-    Min = 0.0, Max = 1.0, Default = 0.7, Increment = 0.1, 
-    Callback = function(v) Settings.HitboxTransparency = v end 
+HitboxSection:AddSlider({
+    Name = "Transparency",
+    Min = 0.0, Max = 1.0, Default = 0.7, Increment = 0.1,
+    Callback = function(v) Settings.HitboxTransparency = v end
 })
 
 local RespawnSection = MiscTab:AddSection({ Name = "Respawn" })
-RespawnSection:AddToggle({ 
-    Name = "Instant Respawn", 
-    Default = false, 
-    Callback = function(s) setInstantRespawn(s) end 
+RespawnSection:AddToggle({
+    Name = "Instant Respawn",
+    Default = false,
+    Callback = function(s) setInstantRespawn(s) end
 })
 
--- НОВАЯ СЕКЦИЯ KILL SOUND
 local SoundSection = MiscTab:AddSection({ Name = "Kill Sound" })
-SoundSection:AddToggle({ 
-    Name = "Enable Kill Sound", 
-    Default = false, 
-    Callback = function(s) setKillSound(s) end 
+SoundSection:AddToggle({
+    Name = "Enable Kill Sound",
+    Default = false,
+    Callback = function(s) setKillSound(s) end
 })
 
--- ─── UI: SETTINGS ────────────────────────────────────────────────────────────
 local SettingsTab = Window:MakeTab({ Name = "SETTINGS", Icon = "rbxassetid://6031094667" })
 local SettingsSection = SettingsTab:AddSection({ Name = "Actions" })
 
@@ -776,16 +728,14 @@ SettingsSection:AddButton({ Name = "UNLOAD SCRIPT", Callback = function()
     clearAllESP()
     restoreAllHitboxes()
     setInstantRespawn(false)
-    setKillSound(false) -- Отключаем хук звуков
-    
-    -- Удаляем созданные кастомные звуки, чтобы не висели в памяти
+    setKillSound(false)
+
     if myKillSound then myKillSound:Destroy() end
     if myHeadshotSound then myHeadshotSound:Destroy() end
 
     if aimConnection then aimConnection:Disconnect() end
     setBHop(false)
-    
-    -- Сброс JumpPower на случай, если setBHop не успел
+
     if LocalPlayer.Character then
         local hum = LocalPlayer.Character:FindFirstChildOfClass("Humanoid")
         if hum and originalJumpPower then
@@ -799,5 +749,4 @@ SettingsSection:AddButton({ Name = "UNLOAD SCRIPT", Callback = function()
     OrionLib:Destroy()
 end })
 
--- ─── INIT ────────────────────────────────────────────────────────────────────
 OrionLib:Init()
