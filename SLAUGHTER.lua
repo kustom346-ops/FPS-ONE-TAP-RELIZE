@@ -17,6 +17,7 @@ local Camera = Workspace.CurrentCamera
 local RunService = game:GetService("RunService")
 local VirtualInputManager = game:GetService("VirtualInputManager")
 local UserInputService = game:GetService("UserInputService")
+local SoundService = game:GetService("SoundService")
 
 -- ─── НАСТРОЙКИ ───────────────────────────────────────────────────────────────
 local Settings = {
@@ -592,6 +593,71 @@ local function setBHop(state)
     end
 end
 
+-- ═══════════════════════════════════════════════════════════════════════════
+-- KILL SOUND SYSTEM
+-- ═══════════════════════════════════════════════════════════════════════════
+local KillSoundEnabled = false
+local killSoundConnection = nil
+
+local CUSTOM_KILL_ID = "rbxassetid://8679627751"
+local CUSTOM_HEADSHOT_ID = "rbxassetid://8679627751"
+local ORIGINAL_KILL_ID = "128825426756691"
+local ORIGINAL_HEADSHOT_ID = "75228431293068"
+
+local myKillSound = Instance.new("Sound")
+myKillSound.SoundId = CUSTOM_KILL_ID
+myKillSound.Volume = 2 
+myKillSound.Parent = SoundService
+
+local myHeadshotSound = Instance.new("Sound")
+myHeadshotSound.SoundId = CUSTOM_HEADSHOT_ID
+myHeadshotSound.Volume = 2 
+myHeadshotSound.Parent = SoundService
+
+local function handleNewSound(sound)
+    if not sound:IsA("Sound") then return end
+    
+    local isKill = string.find(sound.SoundId, ORIGINAL_KILL_ID)
+    local isHeadshot = string.find(sound.SoundId, ORIGINAL_HEADSHOT_ID)
+    
+    if isKill or isHeadshot then
+        sound.Volume = 0
+        sound.Playing = false
+        
+        if isKill then
+            myKillSound:Play()
+            print("Перехвачен звук УБИЙСТВА!")
+        elseif isHeadshot then
+            myHeadshotSound:Play()
+            print("Перехвачен звук ХЕДШОТА!")
+        end
+        
+        task.delay(1, function()
+            if sound and sound.Parent then sound:Destroy() end
+        end)
+    end
+end
+
+local function setKillSound(state)
+    KillSoundEnabled = state
+    
+    if killSoundConnection then
+        killSoundConnection:Disconnect()
+        killSoundConnection = nil
+    end
+    
+    if state then
+        killSoundConnection = game.DescendantAdded:Connect(function(obj)
+            if obj:IsA("Sound") then
+                spawn(function()
+                    task.wait(0.01)
+                    handleNewSound(obj)
+                end)
+            end
+        end)
+    end
+end
+
 -- ─── UI: COMBAT ──────────────────────────────────────────────────────────────
 local CombatTab = Window:MakeTab({ Name = "COMBAT", Icon = "rbxassetid://4483345998" })
 
@@ -681,6 +747,14 @@ RespawnSection:AddToggle({
     Callback = function(s) setInstantRespawn(s) end 
 })
 
+-- НОВАЯ СЕКЦИЯ KILL SOUND
+local SoundSection = MiscTab:AddSection({ Name = "Kill Sound" })
+SoundSection:AddToggle({ 
+    Name = "Enable Kill Sound", 
+    Default = false, 
+    Callback = function(s) setKillSound(s) end 
+})
+
 -- ─── UI: SETTINGS ────────────────────────────────────────────────────────────
 local SettingsTab = Window:MakeTab({ Name = "SETTINGS", Icon = "rbxassetid://6031094667" })
 local SettingsSection = SettingsTab:AddSection({ Name = "Actions" })
@@ -696,11 +770,17 @@ SettingsSection:AddButton({ Name = "UNLOAD SCRIPT", Callback = function()
     Settings.HitboxEnabled = false
     BHopEnabled = false
     InstantRespawnEnabled = false
+    KillSoundEnabled = false
 
     setRapidFireConstants(false)
     clearAllESP()
     restoreAllHitboxes()
     setInstantRespawn(false)
+    setKillSound(false) -- Отключаем хук звуков
+    
+    -- Удаляем созданные кастомные звуки, чтобы не висели в памяти
+    if myKillSound then myKillSound:Destroy() end
+    if myHeadshotSound then myHeadshotSound:Destroy() end
 
     if aimConnection then aimConnection:Disconnect() end
     setBHop(false)
