@@ -16,6 +16,7 @@ local RunService = game:GetService("RunService")
 local VirtualInputManager = game:GetService("VirtualInputManager")
 local UserInputService = game:GetService("UserInputService")
 local SoundService = game:GetService("SoundService")
+local Lighting = game:GetService("Lighting")
 
 local Settings = {
     AimBotEnabled = false,
@@ -36,11 +37,239 @@ local Settings = {
     HitboxEnabled = false,
     HitboxSize = 10.0,
     HitboxTransparency = 0.7,
+    NightModeEnabled = false,
+    NightIntensity = -0.2,
+    NightSaturation = -0.3,
+    NightTint = Color3.fromRGB(100, 120, 180),
+    CurrentWeather = "None",
+    CurrentTime = "None",
+    FogEnd = 1000,
+    FogColor = Color3.fromRGB(192, 192, 192)
 }
 
 local ESPObjects = {}
 local WeaponConstants = nil
 local OriginalHitboxes = {}
+
+-- Визуальные эффекты
+local nightModeCC = Instance.new("ColorCorrectionEffect")
+nightModeCC.Name = "SlaughterNightMode"
+nightModeCC.Brightness = Settings.NightIntensity
+nightModeCC.Contrast = 0.1
+nightModeCC.Saturation = Settings.NightSaturation
+nightModeCC.TintColor = Settings.NightTint
+nightModeCC.Enabled = false
+nightModeCC.Parent = Lighting
+
+local weatherFolder = Instance.new("Folder", Workspace)
+weatherFolder.Name = "SlaughterWeather"
+
+local sky = Instance.new("Sky", Lighting)
+sky.Name = "SlaughterSky"
+
+local sunRays = Instance.new("SunRaysEffect", Lighting)
+sunRays.Name = "SlaughterSunRays"
+sunRays.Intensity = 0.1
+sunRays.Spread = 0.5
+
+-- Звук дождя
+local rainSound = Instance.new("Sound")
+rainSound.SoundId = "rbxassetid://9112966288"
+rainSound.Looped = true
+rainSound.Volume = 0.5
+rainSound.Parent = SoundService
+
+-- Оригинальные настройки
+local OriginalLighting = {
+    ClockTime = Lighting.ClockTime,
+    Brightness = Lighting.Brightness,
+    FogEnd = Lighting.FogEnd,
+    FogStart = Lighting.FogStart,
+    FogColor = Lighting.FogColor,
+    Ambient = Lighting.Ambient,
+    OutdoorAmbient = Lighting.OutdoorAmbient
+}
+
+-- [TIME CHANGER ЛОГИКА]
+local function setTimeOfDay(timeName)
+    Settings.CurrentTime = timeName
+    if timeName == "None" then
+        Lighting.ClockTime = OriginalLighting.ClockTime
+        sunRays.Enabled = false
+        sky.SkyboxBk = ""
+        sky.SkyboxDn = ""
+        sky.SkyboxFt = ""
+        sky.SkyboxLf = ""
+        sky.SkyboxRt = ""
+        sky.SkyboxUp = ""
+        sky.SunAngularSize = 21
+        sky.MoonAngularSize = 11
+        Lighting.GlobalShadows = true
+        Lighting.ShadowSoftness = 0.3
+        Lighting.EnvironmentDiffuseScale = 0
+        Lighting.EnvironmentSpecularScale = 0
+        return
+    end
+
+    sunRays.Enabled = true
+    Lighting.GlobalShadows = true
+    
+    if timeName == "Morning" then
+        Lighting.ClockTime = 6
+        sunRays.Intensity = 0.1
+        sunRays.Spread = 0.5
+        Lighting.Brightness = 1.5
+        Lighting.EnvironmentDiffuseScale = 0.1
+        Lighting.EnvironmentSpecularScale = 0.1
+        sky.SkyboxBk = "rbxassetid://1018282809"
+        sky.SkyboxDn = "rbxassetid://1018282809"
+        sky.SkyboxFt = "rbxassetid://1018282809"
+        sky.SkyboxLf = "rbxassetid://1018282809"
+        sky.SkyboxRt = "rbxassetid://1018282809"
+        sky.SkyboxUp = "rbxassetid://1018282809"
+    elseif timeName == "Day" then
+        Lighting.ClockTime = 14
+        sunRays.Intensity = 0.05
+        sunRays.Spread = 0.8
+        Lighting.Brightness = 3
+        Lighting.EnvironmentDiffuseScale = 0.2
+        Lighting.EnvironmentSpecularScale = 0.2
+        sky.SkyboxBk = "rbxassetid://1018282809"
+        sky.SkyboxDn = "rbxassetid://1018282809"
+        sky.SkyboxFt = "rbxassetid://1018282809"
+        sky.SkyboxLf = "rbxassetid://1018282809"
+        sky.SkyboxRt = "rbxassetid://1018282809"
+        sky.SkyboxUp = "rbxassetid://1018282809"
+    elseif timeName == "Evening" then
+        Lighting.ClockTime = 18
+        sunRays.Intensity = 0.2
+        sunRays.Spread = 1.0
+        Lighting.Brightness = 1.0
+        Lighting.EnvironmentDiffuseScale = 0.1
+        Lighting.EnvironmentSpecularScale = 0.1
+        sky.SkyboxBk = "rbxassetid://1018282809"
+        sky.SkyboxDn = "rbxassetid://1018282809"
+        sky.SkyboxFt = "rbxassetid://1018282809"
+        sky.SkyboxLf = "rbxassetid://1018282809"
+        sky.SkyboxRt = "rbxassetid://1018282809"
+        sky.SkyboxUp = "rbxassetid://1018282809"
+    elseif timeName == "Night" then
+        Lighting.ClockTime = 0
+        sunRays.Enabled = false
+        Lighting.Brightness = 0.2
+        Lighting.EnvironmentDiffuseScale = 0
+        Lighting.EnvironmentSpecularScale = 0
+        sky.SkyboxBk = "rbxassetid://1018282809"
+        sky.SkyboxDn = "rbxassetid://1018282809"
+        sky.SkyboxFt = "rbxassetid://1018282809"
+        sky.SkyboxLf = "rbxassetid://1018282809"
+        sky.SkyboxRt = "rbxassetid://1018282809"
+        sky.SkyboxUp = "rbxassetid://1018282809"
+    end
+end
+
+-- [WEATHER CHANGER ЛОГИКА]
+local function clearWeather()
+    for _, v in ipairs(weatherFolder:GetChildren()) do
+        v:Destroy()
+    end
+    rainSound:Stop()
+end
+
+local function setWeather(weatherName)
+    Settings.CurrentWeather = weatherName
+    clearWeather()
+
+    if weatherName == "None" then return end
+
+    -- Создаем часть для эмиттера, которая будет следовать за камерой
+    local emitterPart = Instance.new("Part")
+    emitterPart.Size = Vector3.new(10, 10, 10)
+    emitterPart.Transparency = 1
+    emitterPart.Anchored = true
+    emitterPart.CanCollide = false
+    emitterPart.Parent = weatherFolder
+
+    if weatherName == "Rain" then
+        Lighting.FogEnd = 500
+        Lighting.FogColor = Color3.fromRGB(150, 150, 150)
+        
+        -- Звук дождя
+        rainSound:Play()
+        
+        local rainEmitter = Instance.new("ParticleEmitter")
+        rainEmitter.Texture = "rbxassetid://241876428"
+        rainEmitter.Rate = 3000
+        rainEmitter.Lifetime = NumberRange.new(0.5, 1)
+        rainEmitter.Speed = NumberRange.new(100, 150)
+        rainEmitter.Acceleration = Vector3.new(0, -100, 0) -- Ускорение вниз
+        rainEmitter.Size = NumberSequence.new({
+            NumberSequenceKeypoint.new(0, 0.1),
+            NumberSequenceKeypoint.new(1, 0.1)
+        })
+        rainEmitter.Rotation = NumberRange.new(0, 360)
+        rainEmitter.Color = ColorSequence.new(Color3.fromRGB(200, 200, 255))
+        rainEmitter.Transparency = NumberSequence.new({
+            NumberSequenceKeypoint.new(0, 0.3),
+            NumberSequenceKeypoint.new(1, 0.8)
+        })
+        rainEmitter.Parent = emitterPart
+
+    elseif weatherName == "Snow" then
+        Lighting.FogEnd = 800
+        Lighting.FogColor = Color3.fromRGB(200, 200, 200)
+        
+        local snowEmitter = Instance.new("ParticleEmitter")
+        snowEmitter.Texture = "rbxassetid://241876428"
+        snowEmitter.Rate = 2000
+        snowEmitter.Lifetime = NumberRange.new(3, 5)
+        snowEmitter.Speed = NumberRange.new(5, 10)
+        snowEmitter.Acceleration = Vector3.new(0, -5, 0) -- Мягкое падение
+        snowEmitter.Size = NumberSequence.new({
+            NumberSequenceKeypoint.new(0, 0.3),
+            NumberSequenceKeypoint.new(1, 0.5)
+        })
+        snowEmitter.Rotation = NumberRange.new(0, 360)
+        snowEmitter.RotSpeed = NumberRange.new(-20, 20)
+        snowEmitter.Color = ColorSequence.new(Color3.fromRGB(255, 255, 255))
+        snowEmitter.Transparency = NumberSequence.new({
+            NumberSequenceKeypoint.new(0, 0.5),
+            NumberSequenceKeypoint.new(1, 0.9)
+        })
+        snowEmitter.Parent = emitterPart
+    end
+
+    -- Двигаем эмиттер за игроком (вокруг камеры)
+    task.spawn(function()
+        while Settings.CurrentWeather == weatherName do
+            if emitterPart and emitterPart.Parent then
+                emitterPart.Position = Camera.CFrame.Position + Vector3.new(0, 30, 0)
+            end
+            task.wait(0.05)
+        end
+    end)
+end
+
+-- [FOG CHANGER ЛОГИКА]
+local function setFog()
+    if Settings.NightModeEnabled then return end
+    Lighting.FogEnd = Settings.FogEnd
+    Lighting.FogColor = Settings.FogColor
+end
+
+local function updateNightMode(state)
+    if state then
+        nightModeCC.Enabled = true
+        Lighting.Ambient = Color3.fromRGB(15, 15, 25)
+        Lighting.OutdoorAmbient = Color3.fromRGB(30, 30, 50)
+        Lighting.Brightness = 0.5
+    else
+        nightModeCC.Enabled = false
+        Lighting.Ambient = OriginalLighting.Ambient
+        Lighting.OutdoorAmbient = OriginalLighting.OutdoorAmbient
+        Lighting.Brightness = OriginalLighting.Brightness
+    end
+end
 
 local fovCircle = Drawing.new("Circle")
 fovCircle.Thickness = 1.5
@@ -555,6 +784,80 @@ local function setBHop(state)
     end
 end
 
+-- [МАГНИТ (MAGNET) ЛОГИКА - HARD LOCK]
+local MagnetEnabled = false
+local MagnetTargetPlayers = true
+local MagnetTargetBots = true
+local MagnetConnection = nil
+local SavedAnchors = {}
+
+local function startMagnet()
+    if MagnetConnection then MagnetConnection:Disconnect() end
+    
+    MagnetConnection = RunService.RenderStepped:Connect(function()
+        if not MagnetEnabled then return end
+        
+        local myChar = LocalPlayer.Character
+        if not myChar or not myChar:FindFirstChild("HumanoidRootPart") then return end
+        
+        local playerSet = getPlayerCharacterSet()
+        local targetPoint = Camera.CFrame.Position + (Camera.CFrame.LookVector * 10)
+        
+        local function pullModel(model)
+            if not model then return end
+            local targetPart = model:FindFirstChild("Head") or model:FindFirstChild("Hitbox_Head")
+            if not targetPart then return end
+            
+            local hum = model:FindFirstChildOfClass("Humanoid")
+            if not hum or hum.Health <= 0 then return end
+            
+            if model == myChar then return end
+            
+            if not targetPart.Anchored then
+                targetPart.Anchored = true
+                SavedAnchors[targetPart] = true
+            end
+            
+            targetPart.CFrame = CFrame.new(targetPoint, targetPoint + Camera.CFrame.LookVector)
+            
+            local root = model:FindFirstChild("HumanoidRootPart")
+            if root then
+                if not root.Anchored then
+                    root.Anchored = true
+                    SavedAnchors[root] = true
+                end
+                root.CFrame = targetPart.CFrame * CFrame.new(0, -1.5, 0)
+            end
+        end
+
+        if MagnetTargetPlayers then
+            for _, player in ipairs(Players:GetPlayers()) do
+                if player ~= LocalPlayer and player.Character then
+                    pullModel(player.Character)
+                end
+            end
+        end
+
+        if MagnetTargetBots then
+            for _, obj in ipairs(Workspace:GetDescendants()) do
+                if obj:IsA("Model") and obj:FindFirstChild("Humanoid") and not playerSet[obj] and obj ~= myChar then
+                    pullModel(obj)
+                end
+            end
+        end
+    end)
+end
+
+local function stopMagnet()
+    if MagnetConnection then MagnetConnection:Disconnect() end
+    for part, _ in pairs(SavedAnchors) do
+        if part and part.Parent then
+            part.Anchored = false
+        end
+    end
+    SavedAnchors = {}
+end
+
 local KillSoundEnabled = false
 local killSoundConnection = nil
 
@@ -666,13 +969,119 @@ ESPSection:AddColorpicker({ Name = "ESP Color", Default = Color3.fromRGB(255, 0,
     end
 end })
 
+-- ВКЛАДКА VISUAL
+local VisualTab = Window:MakeTab({ Name = "VISUAL", Icon = "rbxassetid://4483345998" })
+
+-- Night Mode
+local VisualSection = VisualTab:AddSection({ Name = "Night Mode Settings" })
+
+VisualSection:AddToggle({
+    Name = "Enable Night Mode",
+    Default = false,
+    Callback = function(s)
+        Settings.NightModeEnabled = s
+        updateNightMode(s)
+    end
+})
+
+VisualSection:AddSlider({
+    Name = "Night Intensity (Brightness)",
+    Min = -1.0, Max = 0.0, Default = -0.2, Increment = 0.05,
+    Callback = function(v)
+        Settings.NightIntensity = v
+        nightModeCC.Brightness = v
+    end
+})
+
+VisualSection:AddSlider({
+    Name = "Night Saturation",
+    Min = -1.0, Max = 1.0, Default = -0.3, Increment = 0.05,
+    Callback = function(v)
+        Settings.NightSaturation = v
+        nightModeCC.Saturation = v
+    end
+})
+
+VisualSection:AddColorpicker({
+    Name = "Night Tint Color",
+    Default = Color3.fromRGB(100, 120, 180),
+    Callback = function(c)
+        Settings.NightTint = c
+        nightModeCC.TintColor = c
+    end
+})
+
+-- Weather Changer
+local WeatherSection = VisualTab:AddSection({ Name = "Weather Changer" })
+WeatherSection:AddDropdown({
+    Name = "Select Weather",
+    Default = "None",
+    Options = {"None", "Rain", "Snow"},
+    Callback = function(option)
+        setWeather(option)
+    end
+})
+
+-- Time Changer
+local TimeSection = VisualTab:AddSection({ Name = "Time Changer" })
+TimeSection:AddDropdown({
+    Name = "Select Time",
+    Default = "None",
+    Options = {"None", "Morning", "Day", "Evening", "Night"},
+    Callback = function(option)
+        setTimeOfDay(option)
+    end
+})
+
+-- Fog Changer
+local FogSection = VisualTab:AddSection({ Name = "Fog Changer" })
+FogSection:AddSlider({
+    Name = "Fog Distance (End)",
+    Min = 100, Max = 5000, Default = 1000, Increment = 100,
+    Callback = function(v)
+        Settings.FogEnd = v
+        setFog()
+    end
+})
+FogSection:AddColorpicker({
+    Name = "Fog Color",
+    Default = Color3.fromRGB(192, 192, 192),
+    Callback = function(c)
+        Settings.FogColor = c
+        setFog()
+    end
+})
+
 local MiscTab = Window:MakeTab({ Name = "MISC", Icon = "rbxassetid://4483345998" })
 
 local BHopSection = MiscTab:AddSection({ Name = "BunnyHop" })
 BHopSection:AddToggle({ Name = "Enable BunnyHop", Default = false, Callback = function(state) setBHop(state) end })
 BHopSection:AddSlider({ Name = "Max Speed", Min = 10, Max = 100, Default = 49, Increment = 1, Callback = function(v) BHopTargetSpeed = v end })
 BHopSection:AddSlider({ Name = "Jump Power (0 = Normal)", Min = 0, Max = 200, Default = 0, Increment = 5, Callback = function(v) BHopJumpPower = v end })
-BHopSection:AddLabel("Зажми ПРОБЕЛ — разгон до Max Speed и стоп выше.")
+
+-- СЕКЦИЯ: MAGNET
+local MagnetSection = MiscTab:AddSection({ Name = "Magnet (Hard Lock)" })
+
+MagnetSection:AddToggle({ 
+    Name = "Enable Magnet", 
+    Default = false, 
+    Callback = function(s) 
+        MagnetEnabled = s 
+        if s then startMagnet() else stopMagnet() end
+    end 
+})
+
+MagnetSection:AddToggle({ 
+    Name = "Target Players", 
+    Default = true, 
+    Callback = function(s) MagnetTargetPlayers = s end 
+})
+
+MagnetSection:AddToggle({ 
+    Name = "Target Bots", 
+    Default = true, 
+    Callback = function(s) MagnetTargetBots = s end 
+})
 
 local HitboxSection = MiscTab:AddSection({ Name = "Hitbox Expander" })
 HitboxSection:AddToggle({
@@ -720,15 +1129,27 @@ SettingsSection:AddButton({ Name = "UNLOAD SCRIPT", Callback = function()
     Settings.RapidFireSpamEnabled = false
     Settings.UltraAnimations = false
     Settings.HitboxEnabled = false
+    Settings.NightModeEnabled = false
     BHopEnabled = false
     InstantRespawnEnabled = false
     KillSoundEnabled = false
+    MagnetEnabled = false
 
     setRapidFireConstants(false)
     clearAllESP()
     restoreAllHitboxes()
     setInstantRespawn(false)
     setKillSound(false)
+    stopMagnet()
+    updateNightMode(false)
+    setWeather("None")
+    setTimeOfDay("None")
+    
+    if nightModeCC then nightModeCC:Destroy() end
+    if sky then sky:Destroy() end
+    if sunRays then sunRays:Destroy() end
+    if weatherFolder then weatherFolder:Destroy() end
+    if rainSound then rainSound:Destroy() end
 
     if myKillSound then myKillSound:Destroy() end
     if myHeadshotSound then myHeadshotSound:Destroy() end
