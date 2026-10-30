@@ -44,7 +44,14 @@ local Settings = {
     CurrentWeather = "None",
     CurrentTime = "None",
     FogEnd = 1000,
-    FogColor = Color3.fromRGB(192, 192, 192)
+    FogColor = Color3.fromRGB(192, 192, 192),
+    -- Halloween
+    HalloweenEnabled = false,
+    HalloweenIntensity = 0.6,
+    HalloweenTint = Color3.fromRGB(255, 90, 0),
+    PumpkinsEnabled = false,
+    BatsEnabled = false,
+    VignetteEnabled = false
 }
 
 local ESPObjects = {}
@@ -78,6 +85,153 @@ rainSound.SoundId = "rbxassetid://9112966288"
 rainSound.Looped = true
 rainSound.Volume = 0.5
 rainSound.Parent = SoundService
+
+-- [HALLOWEEN VISUAL]
+local halloweenCC = Instance.new("ColorCorrectionEffect")
+halloweenCC.Name = "SlaughterHalloweenCC"
+halloweenCC.Brightness = -0.05
+halloweenCC.Contrast = 0.2
+halloweenCC.Saturation = -0.2
+halloweenCC.TintColor = Color3.fromRGB(255, 90, 0)
+halloweenCC.Enabled = false
+halloweenCC.Parent = Lighting
+
+local halloweenBlur = Instance.new("BlurEffect")
+halloweenBlur.Name = "SlaughterHalloweenBlur"
+halloweenBlur.Size = 0
+halloweenBlur.Enabled = false
+halloweenBlur.Parent = Lighting
+
+-- Виньетка (чистая, без внешнего ассета — рисуем градиентом через UIGradient)
+local halloweenVignette = Instance.new("Frame")
+halloweenVignette.Name = "SlaughterVignette"
+halloweenVignette.Size = UDim2.fromScale(1, 1)
+halloweenVignette.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
+halloweenVignette.BackgroundTransparency = 0.25
+halloweenVignette.BorderSizePixel = 0
+halloweenVignette.ZIndex = 10
+halloweenVignette.Visible = false
+halloweenVignette.Parent = game:GetService("CoreGui")
+
+local vignetteGradient = Instance.new("UIGradient", halloweenVignette)
+vignetteGradient.Transparency = NumberSequence.new({
+    NumberSequenceKeypoint.new(0, 0),
+    NumberSequenceKeypoint.new(0.5, 1),
+    NumberSequenceKeypoint.new(1, 0)
+})
+vignetteGradient.Rotation = 90
+
+-- Папка для хеллоуин-декора
+local halloweenFolder = Instance.new("Folder", Workspace)
+halloweenFolder.Name = "SlaughterHalloween"
+
+-- Тыквы (чисто неон + PointLight + глаза/рот из частей — без ассетов)
+local pumpkinCache = {}
+
+local function spawnPumpkin()
+    local model = Instance.new("Model")
+    model.Name = "Pumpkin"
+
+    local body = Instance.new("Part")
+    body.Shape = Enum.PartType.Ball
+    body.Size = Vector3.new(4, 4, 4)
+    body.Anchored = true
+    body.CanCollide = false
+    body.Material = Enum.Material.Neon
+    body.Color = Color3.fromRGB(255, 110, 0)
+    body.Transparency = 0.1
+    body.Parent = model
+
+    local light = Instance.new("PointLight", body)
+    light.Color = Color3.fromRGB(255, 120, 0)
+    light.Range = 18
+    light.Brightness = 2.5
+
+    -- Глаза и рот (тёмные части)
+    local function makeFacePart(size, offset)
+        local p = Instance.new("Part")
+        p.Size = size
+        p.Anchored = true
+        p.CanCollide = false
+        p.Material = Enum.Material.SmoothPlastic
+        p.Color = Color3.fromRGB(20, 0, 0)
+        p.Transparency = 0.05
+        p.Parent = model
+        p.CFrame = body.CFrame * CFrame.new(offset)
+        return p
+    end
+
+    makeFacePart(Vector3.new(0.7, 0.9, 0.1), Vector3.new(-0.9, 0.6, -1.95))
+    makeFacePart(Vector3.new(0.7, 0.9, 0.1), Vector3.new(0.9, 0.6, -1.95))
+    makeFacePart(Vector3.new(1.6, 0.4, 0.1), Vector3.new(0, -0.5, -1.95))
+
+    model.PrimaryPart = body
+    model.Parent = halloweenFolder
+    table.insert(pumpkinCache, model)
+end
+
+local function clearPumpkins()
+    for _, m in ipairs(pumpkinCache) do
+        if m and m.Parent then m:Destroy() end
+    end
+    pumpkinCache = {}
+end
+
+-- Летучие мыши (неон-части вместо ассета)
+local bats = {}
+
+local function spawnBat()
+    local model = Instance.new("Model")
+    model.Name = "Bat"
+
+    local body = Instance.new("Part")
+    body.Size = Vector3.new(0.6, 0.4, 0.6)
+    body.Anchored = true
+    body.CanCollide = false
+    body.Material = Enum.Material.Neon
+    body.Color = Color3.fromRGB(40, 0, 40)
+    body.Transparency = 0.15
+    body.Parent = model
+
+    local wingL = Instance.new("Part")
+    wingL.Size = Vector3.new(1.4, 0.05, 0.7)
+    wingL.Anchored = true
+    wingL.CanCollide = false
+    wingL.Material = Enum.Material.Neon
+    wingL.Color = Color3.fromRGB(60, 0, 60)
+    wingL.Transparency = 0.2
+    wingL.Parent = model
+
+    local wingR = wingL:Clone()
+    wingR.Parent = model
+
+    local light = Instance.new("PointLight", body)
+    light.Color = Color3.fromRGB(150, 0, 200)
+    light.Range = 10
+    light.Brightness = 1.5
+
+    model.PrimaryPart = body
+    model.Parent = halloweenFolder
+    table.insert(bats, { model = model, body = body, wingL = wingL, wingR = wingR, phase = math.random() * math.pi * 2 })
+end
+
+local function clearBats()
+    for _, b in ipairs(bats) do
+        if b.model and b.model.Parent then b.model:Destroy() end
+    end
+    bats = {}
+end
+
+local function updateHalloween(state)
+    Settings.HalloweenEnabled = state
+    halloweenCC.Enabled = state
+    halloweenBlur.Enabled = state
+    if not state then
+        clearPumpkins()
+        clearBats()
+        halloweenVignette.Visible = false
+    end
+end
 
 -- Оригинальные настройки
 local OriginalLighting = {
@@ -287,6 +441,63 @@ RunService.RenderStepped:Connect(function()
     else
         fovCircle.Visible = false
     end
+end)
+
+-- [HALLOWEEN ANIMATION]
+RunService.RenderStepped:Connect(function(dt)
+    if not Settings.HalloweenEnabled then return end
+
+    local camPos = Camera.CFrame.Position
+
+    -- Виньетка
+    halloweenVignette.Visible = Settings.VignetteEnabled
+    if Settings.VignetteEnabled then
+        halloweenVignette.BackgroundTransparency = 0.55 - (0.25 * Settings.HalloweenIntensity)
+    end
+
+    -- Тыквы
+    if Settings.PumpkinsEnabled and #pumpkinCache < 8 then
+        spawnPumpkin()
+    end
+    for i, m in ipairs(pumpkinCache) do
+        if m.Parent and m.PrimaryPart then
+            local t = tick() * 0.6 + i * 1.7
+            local radius = 18 + math.sin(t) * 4
+            m:SetPrimaryPartCFrame(CFrame.new(camPos + Vector3.new(
+                math.cos(t) * radius,
+                2 + math.sin(t * 1.3) * 2,
+                math.sin(t) * radius
+            )))
+        end
+    end
+
+    -- Летучие мыши
+    if Settings.BatsEnabled and #bats < 14 then
+        spawnBat()
+    end
+    for i, b in ipairs(bats) do
+        if b.model.Parent then
+            local t = tick() * 1.4 + b.phase
+            local pos = camPos + Vector3.new(
+                math.sin(t) * 25,
+                8 + math.sin(t * 2) * 5,
+                math.cos(t * 1.4) * 25
+            )
+            b.model:PivotTo(CFrame.lookAt(pos, camPos))
+            -- Взмах крыльев
+            local flap = math.sin(tick() * 12 + b.phase) * 0.6
+            b.wingL.CFrame = b.body.CFrame * CFrame.new(-0.9, 0, 0) * CFrame.Angles(0, 0, flap)
+            b.wingR.CFrame = b.body.CFrame * CFrame.new(0.9, 0, 0) * CFrame.Angles(0, 0, -flap)
+        end
+    end
+end)
+
+-- Обновление интенсивности
+RunService.Heartbeat:Connect(function()
+    if not Settings.HalloweenEnabled then return end
+    halloweenCC.Brightness = -0.05 * Settings.HalloweenIntensity
+    halloweenCC.TintColor = Settings.HalloweenTint
+    halloweenBlur.Size = 2 * Settings.HalloweenIntensity
 end)
 
 local function getPlayerCharacterSet()
@@ -1052,6 +1263,54 @@ FogSection:AddColorpicker({
     end
 })
 
+-- HALLOWEEN
+local HalloweenSection = VisualTab:AddSection({ Name = "Halloween Vibe" })
+
+HalloweenSection:AddToggle({
+    Name = "Enable Halloween Mode",
+    Default = false,
+    Callback = function(s) updateHalloween(s) end
+})
+
+HalloweenSection:AddSlider({
+    Name = "Intensity",
+    Min = 0.0, Max = 2.0, Default = 0.6, Increment = 0.1,
+    Callback = function(v) Settings.HalloweenIntensity = v end
+})
+
+HalloweenSection:AddColorpicker({
+    Name = "Halloween Tint",
+    Default = Color3.fromRGB(255, 90, 0),
+    Callback = function(c) Settings.HalloweenTint = c end
+})
+
+HalloweenSection:AddToggle({
+    Name = "Floating Pumpkins",
+    Default = false,
+    Callback = function(s)
+        Settings.PumpkinsEnabled = s
+        if not s then clearPumpkins() end
+    end
+})
+
+HalloweenSection:AddToggle({
+    Name = "Bats Swarm",
+    Default = false,
+    Callback = function(s)
+        Settings.BatsEnabled = s
+        if not s then clearBats() end
+    end
+})
+
+HalloweenSection:AddToggle({
+    Name = "Vignette (Dark Corners)",
+    Default = false,
+    Callback = function(s)
+        Settings.VignetteEnabled = s
+        halloweenVignette.Visible = s and Settings.HalloweenEnabled
+    end
+})
+
 local MiscTab = Window:MakeTab({ Name = "MISC", Icon = "rbxassetid://4483345998" })
 
 local BHopSection = MiscTab:AddSection({ Name = "BunnyHop" })
@@ -1145,7 +1404,18 @@ SettingsSection:AddButton({ Name = "UNLOAD SCRIPT", Callback = function()
     setWeather("None")
     setTimeOfDay("None")
     
+    Settings.HalloweenEnabled = false
+    Settings.PumpkinsEnabled = false
+    Settings.BatsEnabled = false
+    Settings.VignetteEnabled = false
+    clearPumpkins()
+    clearBats()
+
     if nightModeCC then nightModeCC:Destroy() end
+    if halloweenCC then halloweenCC:Destroy() end
+    if halloweenBlur then halloweenBlur:Destroy() end
+    if halloweenVignette then halloweenVignette:Destroy() end
+    if halloweenFolder then halloweenFolder:Destroy() end
     if sky then sky:Destroy() end
     if sunRays then sunRays:Destroy() end
     if weatherFolder then weatherFolder:Destroy() end
