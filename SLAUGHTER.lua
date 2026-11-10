@@ -1,7 +1,7 @@
 local OrionLib = loadstring(game:HttpGet("https://raw.githubusercontent.com/Qanuir/orion-ui/refs/heads/main/source.lua"))()
 
 local Window = OrionLib:MakeWindow({
-    Name = "SLAUGHTER 1.2",
+    Name = "SLAUGHTER 1.3",
     HidePremium = false,
     SaveConfig = false,
     ConfigFolder = "SlaughterConfig",
