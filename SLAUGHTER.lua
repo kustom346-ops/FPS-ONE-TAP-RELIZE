@@ -34,6 +34,15 @@ local Settings = {
     MaxTargetDistance = 1000,
     ESPEnabled = false,
     ESPColor = Color3.fromRGB(255, 0, 0),
+    ESPBoxes = false,
+    ESPTracers = false,
+    ESPNames = false,
+    ESPDistance = false,
+    ESPHealth = false,
+    ESPSkeleton = false,
+    ESPTracerOrigin = "Bottom",
+    ESPMaxDistance = 1000,
+    ESPTextSize = 14,
     HitboxEnabled = false,
     HitboxSize = 10.0,
     HitboxTransparency = 0.7,
@@ -45,17 +54,8 @@ local Settings = {
     CurrentTime = "None",
     FogEnd = 1000,
     FogColor = Color3.fromRGB(192, 192, 192),
-    -- Halloween
-    HalloweenEnabled = false,
-    HalloweenIntensity = 0.6,
-    HalloweenTint = Color3.fromRGB(255, 90, 0),
-    PumpkinsEnabled = false,
-    BatsEnabled = false,
-    VignetteEnabled = false
 }
 
-local ESPObjects = {}
-local WeaponConstants = nil
 local OriginalHitboxes = {}
 
 -- Визуальные эффекты
@@ -79,161 +79,12 @@ sunRays.Name = "SlaughterSunRays"
 sunRays.Intensity = 0.1
 sunRays.Spread = 0.5
 
--- Звук дождя
 local rainSound = Instance.new("Sound")
 rainSound.SoundId = "rbxassetid://9112966288"
 rainSound.Looped = true
 rainSound.Volume = 0.5
 rainSound.Parent = SoundService
 
--- [HALLOWEEN VISUAL]
-local halloweenCC = Instance.new("ColorCorrectionEffect")
-halloweenCC.Name = "SlaughterHalloweenCC"
-halloweenCC.Brightness = -0.05
-halloweenCC.Contrast = 0.2
-halloweenCC.Saturation = -0.2
-halloweenCC.TintColor = Color3.fromRGB(255, 90, 0)
-halloweenCC.Enabled = false
-halloweenCC.Parent = Lighting
-
-local halloweenBlur = Instance.new("BlurEffect")
-halloweenBlur.Name = "SlaughterHalloweenBlur"
-halloweenBlur.Size = 0
-halloweenBlur.Enabled = false
-halloweenBlur.Parent = Lighting
-
--- Виньетка (чистая, без внешнего ассета — рисуем градиентом через UIGradient)
-local halloweenVignette = Instance.new("Frame")
-halloweenVignette.Name = "SlaughterVignette"
-halloweenVignette.Size = UDim2.fromScale(1, 1)
-halloweenVignette.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
-halloweenVignette.BackgroundTransparency = 0.25
-halloweenVignette.BorderSizePixel = 0
-halloweenVignette.ZIndex = 10
-halloweenVignette.Visible = false
-halloweenVignette.Parent = game:GetService("CoreGui")
-
-local vignetteGradient = Instance.new("UIGradient", halloweenVignette)
-vignetteGradient.Transparency = NumberSequence.new({
-    NumberSequenceKeypoint.new(0, 0),
-    NumberSequenceKeypoint.new(0.5, 1),
-    NumberSequenceKeypoint.new(1, 0)
-})
-vignetteGradient.Rotation = 90
-
--- Папка для хеллоуин-декора
-local halloweenFolder = Instance.new("Folder", Workspace)
-halloweenFolder.Name = "SlaughterHalloween"
-
--- Тыквы (чисто неон + PointLight + глаза/рот из частей — без ассетов)
-local pumpkinCache = {}
-
-local function spawnPumpkin()
-    local model = Instance.new("Model")
-    model.Name = "Pumpkin"
-
-    local body = Instance.new("Part")
-    body.Shape = Enum.PartType.Ball
-    body.Size = Vector3.new(4, 4, 4)
-    body.Anchored = true
-    body.CanCollide = false
-    body.Material = Enum.Material.Neon
-    body.Color = Color3.fromRGB(255, 110, 0)
-    body.Transparency = 0.1
-    body.Parent = model
-
-    local light = Instance.new("PointLight", body)
-    light.Color = Color3.fromRGB(255, 120, 0)
-    light.Range = 18
-    light.Brightness = 2.5
-
-    -- Глаза и рот (тёмные части)
-    local function makeFacePart(size, offset)
-        local p = Instance.new("Part")
-        p.Size = size
-        p.Anchored = true
-        p.CanCollide = false
-        p.Material = Enum.Material.SmoothPlastic
-        p.Color = Color3.fromRGB(20, 0, 0)
-        p.Transparency = 0.05
-        p.Parent = model
-        p.CFrame = body.CFrame * CFrame.new(offset)
-        return p
-    end
-
-    makeFacePart(Vector3.new(0.7, 0.9, 0.1), Vector3.new(-0.9, 0.6, -1.95))
-    makeFacePart(Vector3.new(0.7, 0.9, 0.1), Vector3.new(0.9, 0.6, -1.95))
-    makeFacePart(Vector3.new(1.6, 0.4, 0.1), Vector3.new(0, -0.5, -1.95))
-
-    model.PrimaryPart = body
-    model.Parent = halloweenFolder
-    table.insert(pumpkinCache, model)
-end
-
-local function clearPumpkins()
-    for _, m in ipairs(pumpkinCache) do
-        if m and m.Parent then m:Destroy() end
-    end
-    pumpkinCache = {}
-end
-
--- Летучие мыши (неон-части вместо ассета)
-local bats = {}
-
-local function spawnBat()
-    local model = Instance.new("Model")
-    model.Name = "Bat"
-
-    local body = Instance.new("Part")
-    body.Size = Vector3.new(0.6, 0.4, 0.6)
-    body.Anchored = true
-    body.CanCollide = false
-    body.Material = Enum.Material.Neon
-    body.Color = Color3.fromRGB(40, 0, 40)
-    body.Transparency = 0.15
-    body.Parent = model
-
-    local wingL = Instance.new("Part")
-    wingL.Size = Vector3.new(1.4, 0.05, 0.7)
-    wingL.Anchored = true
-    wingL.CanCollide = false
-    wingL.Material = Enum.Material.Neon
-    wingL.Color = Color3.fromRGB(60, 0, 60)
-    wingL.Transparency = 0.2
-    wingL.Parent = model
-
-    local wingR = wingL:Clone()
-    wingR.Parent = model
-
-    local light = Instance.new("PointLight", body)
-    light.Color = Color3.fromRGB(150, 0, 200)
-    light.Range = 10
-    light.Brightness = 1.5
-
-    model.PrimaryPart = body
-    model.Parent = halloweenFolder
-    table.insert(bats, { model = model, body = body, wingL = wingL, wingR = wingR, phase = math.random() * math.pi * 2 })
-end
-
-local function clearBats()
-    for _, b in ipairs(bats) do
-        if b.model and b.model.Parent then b.model:Destroy() end
-    end
-    bats = {}
-end
-
-local function updateHalloween(state)
-    Settings.HalloweenEnabled = state
-    halloweenCC.Enabled = state
-    halloweenBlur.Enabled = state
-    if not state then
-        clearPumpkins()
-        clearBats()
-        halloweenVignette.Visible = false
-    end
-end
-
--- Оригинальные настройки
 local OriginalLighting = {
     ClockTime = Lighting.ClockTime,
     Brightness = Lighting.Brightness,
@@ -244,7 +95,7 @@ local OriginalLighting = {
     OutdoorAmbient = Lighting.OutdoorAmbient
 }
 
--- [TIME CHANGER ЛОГИКА]
+-- [TIME CHANGER]
 local function setTimeOfDay(timeName)
     Settings.CurrentTime = timeName
     if timeName == "None" then
@@ -267,7 +118,7 @@ local function setTimeOfDay(timeName)
 
     sunRays.Enabled = true
     Lighting.GlobalShadows = true
-    
+
     if timeName == "Morning" then
         Lighting.ClockTime = 6
         sunRays.Intensity = 0.1
@@ -322,7 +173,7 @@ local function setTimeOfDay(timeName)
     end
 end
 
--- [WEATHER CHANGER ЛОГИКА]
+-- [WEATHER CHANGER]
 local function clearWeather()
     for _, v in ipairs(weatherFolder:GetChildren()) do
         v:Destroy()
@@ -333,10 +184,8 @@ end
 local function setWeather(weatherName)
     Settings.CurrentWeather = weatherName
     clearWeather()
-
     if weatherName == "None" then return end
 
-    -- Создаем часть для эмиттера, которая будет следовать за камерой
     local emitterPart = Instance.new("Part")
     emitterPart.Size = Vector3.new(10, 10, 10)
     emitterPart.Transparency = 1
@@ -347,16 +196,14 @@ local function setWeather(weatherName)
     if weatherName == "Rain" then
         Lighting.FogEnd = 500
         Lighting.FogColor = Color3.fromRGB(150, 150, 150)
-        
-        -- Звук дождя
         rainSound:Play()
-        
+
         local rainEmitter = Instance.new("ParticleEmitter")
         rainEmitter.Texture = "rbxassetid://241876428"
         rainEmitter.Rate = 3000
         rainEmitter.Lifetime = NumberRange.new(0.5, 1)
         rainEmitter.Speed = NumberRange.new(100, 150)
-        rainEmitter.Acceleration = Vector3.new(0, -100, 0) -- Ускорение вниз
+        rainEmitter.Acceleration = Vector3.new(0, -100, 0)
         rainEmitter.Size = NumberSequence.new({
             NumberSequenceKeypoint.new(0, 0.1),
             NumberSequenceKeypoint.new(1, 0.1)
@@ -368,17 +215,16 @@ local function setWeather(weatherName)
             NumberSequenceKeypoint.new(1, 0.8)
         })
         rainEmitter.Parent = emitterPart
-
     elseif weatherName == "Snow" then
         Lighting.FogEnd = 800
         Lighting.FogColor = Color3.fromRGB(200, 200, 200)
-        
+
         local snowEmitter = Instance.new("ParticleEmitter")
         snowEmitter.Texture = "rbxassetid://241876428"
         snowEmitter.Rate = 2000
         snowEmitter.Lifetime = NumberRange.new(3, 5)
         snowEmitter.Speed = NumberRange.new(5, 10)
-        snowEmitter.Acceleration = Vector3.new(0, -5, 0) -- Мягкое падение
+        snowEmitter.Acceleration = Vector3.new(0, -5, 0)
         snowEmitter.Size = NumberSequence.new({
             NumberSequenceKeypoint.new(0, 0.3),
             NumberSequenceKeypoint.new(1, 0.5)
@@ -393,7 +239,6 @@ local function setWeather(weatherName)
         snowEmitter.Parent = emitterPart
     end
 
-    -- Двигаем эмиттер за игроком (вокруг камеры)
     task.spawn(function()
         while Settings.CurrentWeather == weatherName do
             if emitterPart and emitterPart.Parent then
@@ -404,7 +249,7 @@ local function setWeather(weatherName)
     end)
 end
 
--- [FOG CHANGER ЛОГИКА]
+-- [FOG CHANGER]
 local function setFog()
     if Settings.NightModeEnabled then return end
     Lighting.FogEnd = Settings.FogEnd
@@ -443,63 +288,6 @@ RunService.RenderStepped:Connect(function()
     end
 end)
 
--- [HALLOWEEN ANIMATION]
-RunService.RenderStepped:Connect(function(dt)
-    if not Settings.HalloweenEnabled then return end
-
-    local camPos = Camera.CFrame.Position
-
-    -- Виньетка
-    halloweenVignette.Visible = Settings.VignetteEnabled
-    if Settings.VignetteEnabled then
-        halloweenVignette.BackgroundTransparency = 0.55 - (0.25 * Settings.HalloweenIntensity)
-    end
-
-    -- Тыквы
-    if Settings.PumpkinsEnabled and #pumpkinCache < 8 then
-        spawnPumpkin()
-    end
-    for i, m in ipairs(pumpkinCache) do
-        if m.Parent and m.PrimaryPart then
-            local t = tick() * 0.6 + i * 1.7
-            local radius = 18 + math.sin(t) * 4
-            m:SetPrimaryPartCFrame(CFrame.new(camPos + Vector3.new(
-                math.cos(t) * radius,
-                2 + math.sin(t * 1.3) * 2,
-                math.sin(t) * radius
-            )))
-        end
-    end
-
-    -- Летучие мыши
-    if Settings.BatsEnabled and #bats < 14 then
-        spawnBat()
-    end
-    for i, b in ipairs(bats) do
-        if b.model.Parent then
-            local t = tick() * 1.4 + b.phase
-            local pos = camPos + Vector3.new(
-                math.sin(t) * 25,
-                8 + math.sin(t * 2) * 5,
-                math.cos(t * 1.4) * 25
-            )
-            b.model:PivotTo(CFrame.lookAt(pos, camPos))
-            -- Взмах крыльев
-            local flap = math.sin(tick() * 12 + b.phase) * 0.6
-            b.wingL.CFrame = b.body.CFrame * CFrame.new(-0.9, 0, 0) * CFrame.Angles(0, 0, flap)
-            b.wingR.CFrame = b.body.CFrame * CFrame.new(0.9, 0, 0) * CFrame.Angles(0, 0, -flap)
-        end
-    end
-end)
-
--- Обновление интенсивности
-RunService.Heartbeat:Connect(function()
-    if not Settings.HalloweenEnabled then return end
-    halloweenCC.Brightness = -0.05 * Settings.HalloweenIntensity
-    halloweenCC.TintColor = Settings.HalloweenTint
-    halloweenBlur.Size = 2 * Settings.HalloweenIntensity
-end)
-
 local function getPlayerCharacterSet()
     local set = {}
     for _, player in ipairs(Players:GetPlayers()) do
@@ -513,9 +301,19 @@ local function getPlayerCharacterSet()
     return set
 end
 
-local function createESP(model)
-    if not model or not model:IsA("Model") or not model:FindFirstChild("Humanoid") then return end
-    if ESPObjects[model] then return end
+-- ==================== ESP (расширенный) ====================
+local ESPObjects = {}
+
+local function newDrawing(class, props)
+    local d = Drawing.new(class)
+    for k, v in pairs(props) do d[k] = v end
+    d.Visible = false
+    return d
+end
+
+local function createESPEntry(model)
+    if not model or not model:IsA("Model") or not model:FindFirstChild("Humanoid") then return nil end
+    if ESPObjects[model] then return ESPObjects[model] end
 
     local highlight = Instance.new("Highlight")
     highlight.Name = "SlaughterESP"
@@ -527,59 +325,340 @@ local function createESP(model)
     highlight.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
     highlight.Parent = model
 
-    ESPObjects[model] = highlight
+    local entry = {
+        highlight = highlight,
+        box = newDrawing("Square", { Thickness = 1.5, Filled = false, Color = Settings.ESPColor, Transparency = 1 }),
+        boxOutline = newDrawing("Square", { Thickness = 3, Filled = false, Color = Color3.fromRGB(0,0,0), Transparency = 0.6 }),
+        tracer = newDrawing("Line", { Thickness = 1.5, Color = Settings.ESPColor, Transparency = 1 }),
+        tracerOutline = newDrawing("Line", { Thickness = 3, Color = Color3.fromRGB(0,0,0), Transparency = 0.6 }),
+        name = newDrawing("Text", { Size = Settings.ESPTextSize, Center = true, Outline = true, OutlineColor = Color3.fromRGB(0,0,0), Color = Color3.fromRGB(255,255,255), Font = 2 }),
+        distance = newDrawing("Text", { Size = Settings.ESPTextSize, Center = true, Outline = true, OutlineColor = Color3.fromRGB(0,0,0), Color = Color3.fromRGB(200,200,200), Font = 2 }),
+        healthBarBg = newDrawing("Square", { Thickness = 1, Filled = true, Color = Color3.fromRGB(0,0,0), Transparency = 0.5 }),
+        healthBar = newDrawing("Square", { Thickness = 1, Filled = true, Color = Color3.fromRGB(0,255,0), Transparency = 0.3 }),
+        skeletonLines = {},
+    }
+
+    ESPObjects[model] = entry
+    return entry
+end
+
+-- ИСПРАВЛЕНО: Drawing-объекты имеют typeof == "userdata", а не "Instance"
+local function destroyESPEntry(model)
+    local entry = ESPObjects[model]
+    if not entry then return end
+
+    if entry.highlight and entry.highlight.Parent then
+        entry.highlight:Destroy()
+    end
+
+    for key, d in pairs(entry) do
+        if key ~= "highlight" and key ~= "skeletonLines" then
+            if d and d.Remove then
+                pcall(function() d:Remove() end)
+            end
+        end
+    end
+
+    if entry.skeletonLines then
+        for _, line in ipairs(entry.skeletonLines) do
+            if line and line.Remove then
+                pcall(function() line:Remove() end)
+            end
+        end
+    end
+
+    ESPObjects[model] = nil
+end
+
+local function clearAllESP()
+    for model, _ in pairs(ESPObjects) do
+        destroyESPEntry(model)
+    end
+    ESPObjects = {}
+end
+
+local SKELETON_PAIRS = {
+    {"Head", "UpperTorso"},
+    {"UpperTorso", "LowerTorso"},
+    {"UpperTorso", "LeftUpperArm"},
+    {"LeftUpperArm", "LeftLowerArm"},
+    {"LeftLowerArm", "LeftHand"},
+    {"UpperTorso", "RightUpperArm"},
+    {"RightUpperArm", "RightLowerArm"},
+    {"RightLowerArm", "RightHand"},
+    {"LowerTorso", "LeftUpperLeg"},
+    {"LeftUpperLeg", "LeftLowerLeg"},
+    {"LeftLowerLeg", "LeftFoot"},
+    {"LowerTorso", "RightUpperLeg"},
+    {"RightUpperLeg", "RightLowerLeg"},
+    {"RightLowerLeg", "RightFoot"},
+}
+
+local R6_MAP = {
+    Head = "Head", UpperTorso = "Torso", LowerTorso = "Torso",
+    LeftUpperArm = "Left Arm", LeftLowerArm = "Left Arm", LeftHand = "Left Arm",
+    RightUpperArm = "Right Arm", RightLowerArm = "Right Arm", RightHand = "Right Arm",
+    LeftUpperLeg = "Left Leg", LeftLowerLeg = "Left Leg", LeftFoot = "Left Leg",
+    RightUpperLeg = "Right Leg", RightLowerLeg = "Right Leg", RightFoot = "Right Leg",
+}
+
+local function getPart(model, name)
+    local p = model:FindFirstChild(name)
+    if p and p:IsA("BasePart") then return p end
+    local alt = R6_MAP[name]
+    if alt then
+        local r6 = model:FindFirstChild(alt)
+        if r6 and r6:IsA("BasePart") then return r6 end
+    end
+    return nil
+end
+
+local function getBoundingBox(model)
+    local head = model:FindFirstChild("Head")
+    if not head or not head:IsA("BasePart") then return nil end
+    local root = model:FindFirstChild("HumanoidRootPart") or head
+    if not root:IsA("BasePart") then return nil end
+
+    local topPos = head.Position + Vector3.new(0, head.Size.Y / 2, 0)
+    local bottomPos = root.Position - Vector3.new(0, 3, 0)
+
+    local topScreen, topOn = Camera:WorldToViewportPoint(topPos)
+    local bottomScreen, bottomOn = Camera:WorldToViewportPoint(bottomPos)
+    if not (topOn and bottomOn) then return nil end
+
+    local height = math.abs(bottomScreen.Y - topScreen.Y)
+    local width = height * 0.55
+
+    return {
+        x = topScreen.X - width / 2,
+        y = topScreen.Y,
+        w = width,
+        h = height,
+        centerX = topScreen.X,
+        topY = topScreen.Y,
+        bottomY = bottomScreen.Y,
+    }
 end
 
 local function updateESP()
     if not Settings.ESPEnabled then return end
 
     local playerSet = getPlayerCharacterSet()
+    local camPos = Camera.CFrame.Position
+    local vpSize = Camera.ViewportSize
+    local tracerOrigin = Vector2.new(vpSize.X / 2, vpSize.Y)
+    if Settings.ESPTracerOrigin == "Mouse" then
+        local m = UserInputService:GetMouseLocation()
+        tracerOrigin = Vector2.new(m.X, m.Y)
+    elseif Settings.ESPTracerOrigin == "Center" then
+        tracerOrigin = Vector2.new(vpSize.X / 2, vpSize.Y / 2)
+    end
+
+    -- validModels[model] = player (игрок) или false (бот)
+    local validModels = {}
 
     for _, player in ipairs(Players:GetPlayers()) do
         if player ~= LocalPlayer and player.Character then
-            createESP(player.Character)
+            validModels[player.Character] = player
         end
     end
 
     for _, obj in ipairs(Workspace:GetDescendants()) do
         if obj:IsA("Model")
-           and obj:FindFirstChild("Humanoid")
-           and not playerSet[obj]
-           and obj ~= LocalPlayer.Character then
-            createESP(obj)
+        and obj:FindFirstChild("Humanoid")
+        and not playerSet[obj]
+        and obj ~= LocalPlayer.Character
+        and validModels[obj] == nil then
+            validModels[obj] = false
         end
     end
 
-    for model, highlight in pairs(ESPObjects) do
-        if not model.Parent or not highlight.Parent then
-            if highlight and highlight.Parent then highlight:Destroy() end
-            ESPObjects[model] = nil
+    -- Сначала чистим всё, что больше не валидно (мертво / удалено / далеко)
+    for model, entry in pairs(ESPObjects) do
+        local hum = model:FindFirstChildOfClass("Humanoid")
+        local head = model:FindFirstChild("Head")
+        local isDead = (not hum) or hum.Health <= 0
+        local isGone = not model.Parent or not head or not head:IsA("BasePart")
+        local tooFar = false
+        if not isGone and head then
+            tooFar = (head.Position - camPos).Magnitude > Settings.ESPMaxDistance
+        end
+
+        if isDead or isGone or tooFar or validModels[model] == nil then
+            destroyESPEntry(model)
+        end
+    end
+
+    -- Рисуем только живых и в дистанции
+    for model, player in pairs(validModels) do
+        if not model.Parent then continue end
+
+        local hum = model:FindFirstChildOfClass("Humanoid")
+        if not hum or hum.Health <= 0 then continue end
+
+        local head = model:FindFirstChild("Head")
+        if not head or not head:IsA("BasePart") then continue end
+
+        local dist = (head.Position - camPos).Magnitude
+        if dist > Settings.ESPMaxDistance then continue end
+
+        local entry = createESPEntry(model)
+        if not entry then continue end
+
+        local box = getBoundingBox(model)
+
+        entry.highlight.Enabled = true
+        entry.highlight.FillColor = Settings.ESPColor
+        entry.highlight.OutlineColor = Settings.ESPColor
+        entry.highlight.FillTransparency = 0.5
+
+        -- Boxes
+        if Settings.ESPBoxes and box then
+            entry.boxOutline.Visible = true
+            entry.boxOutline.Size = Vector2.new(box.w, box.h)
+            entry.boxOutline.Position = Vector2.new(box.x, box.y)
+            entry.boxOutline.Color = Color3.fromRGB(0, 0, 0)
+
+            entry.box.Visible = true
+            entry.box.Size = Vector2.new(box.w, box.h)
+            entry.box.Position = Vector2.new(box.x, box.y)
+            entry.box.Color = Settings.ESPColor
+        else
+            entry.box.Visible = false
+            entry.boxOutline.Visible = false
+        end
+
+        -- Tracers
+        if Settings.ESPTracers and box then
+            entry.tracerOutline.Visible = true
+            entry.tracerOutline.From = tracerOrigin
+            entry.tracerOutline.To = Vector2.new(box.centerX, box.bottomY)
+            entry.tracerOutline.Color = Color3.fromRGB(0, 0, 0)
+
+            entry.tracer.Visible = true
+            entry.tracer.From = tracerOrigin
+            entry.tracer.To = Vector2.new(box.centerX, box.bottomY)
+            entry.tracer.Color = Settings.ESPColor
+        else
+            entry.tracer.Visible = false
+            entry.tracerOutline.Visible = false
+        end
+
+        -- Names (игрок = ник, бот = имя модели)
+        if Settings.ESPNames and box then
+            local nameStr
+            if player then
+                nameStr = player.Name
+            else
+                nameStr = model.Name ~= "Model" and model.Name or "Bot"
+            end
+            entry.name.Visible = true
+            entry.name.Text = nameStr
+            entry.name.Position = Vector2.new(box.centerX, box.topY - 16)
+            entry.name.Color = Settings.ESPColor
+            entry.name.Size = Settings.ESPTextSize
+        else
+            entry.name.Visible = false
+        end
+
+        -- Distance
+        if Settings.ESPDistance and box then
+            entry.distance.Visible = true
+            entry.distance.Text = string.format("[%d m]", math.floor(dist))
+            entry.distance.Position = Vector2.new(box.centerX, box.bottomY + 2)
+            entry.distance.Color = Color3.fromRGB(200, 200, 200)
+            entry.distance.Size = Settings.ESPTextSize
+        else
+            entry.distance.Visible = false
+        end
+
+        -- Health bar
+        if Settings.ESPHealth and box then
+            local hp = math.clamp(hum.Health / math.max(hum.MaxHealth, 1), 0, 1)
+            local barW = 3
+            local barX = box.x - 6
+
+            entry.healthBarBg.Visible = true
+            entry.healthBarBg.Size = Vector2.new(barW, box.h)
+            entry.healthBarBg.Position = Vector2.new(barX, box.y)
+            entry.healthBarBg.Color = Color3.fromRGB(0, 0, 0)
+
+            entry.healthBar.Visible = true
+            entry.healthBar.Size = Vector2.new(barW, box.h * hp)
+            entry.healthBar.Position = Vector2.new(barX, box.y + box.h * (1 - hp))
+            entry.healthBar.Color = Color3.fromRGB(
+                math.floor(255 * (1 - hp)),
+                math.floor(255 * hp),
+                0
+            )
+        else
+            entry.healthBar.Visible = false
+            entry.healthBarBg.Visible = false
+        end
+
+        -- Skeleton
+        if Settings.ESPSkeleton and box then
+            if #entry.skeletonLines == 0 then
+                for _ = 1, #SKELETON_PAIRS do
+                    table.insert(entry.skeletonLines, newDrawing("Line", {
+                        Thickness = 1,
+                        Color = Settings.ESPColor,
+                        Transparency = 1,
+                    }))
+                end
+            end
+
+            for i, pair in ipairs(SKELETON_PAIRS) do
+                local line = entry.skeletonLines[i]
+                local p1 = getPart(model, pair[1])
+                local p2 = getPart(model, pair[2])
+                if p1 and p2 then
+                    local s1, on1 = Camera:WorldToViewportPoint(p1.Position)
+                    local s2, on2 = Camera:WorldToViewportPoint(p2.Position)
+                    if on1 and on2 then
+                        line.Visible = true
+                        line.From = Vector2.new(s1.X, s1.Y)
+                        line.To = Vector2.new(s2.X, s2.Y)
+                        line.Color = Settings.ESPColor
+                    else
+                        line.Visible = false
+                    end
+                else
+                    line.Visible = false
+                end
+            end
+        else
+            for _, line in ipairs(entry.skeletonLines) do
+                line.Visible = false
+            end
         end
     end
 end
 
-local function clearAllESP()
-    for model, highlight in pairs(ESPObjects) do
-        if highlight and highlight.Parent then highlight:Destroy() end
+RunService.RenderStepped:Connect(function()
+    if Settings.ESPEnabled then
+        updateESP()
+    else
+        -- аварийная чистка, если что-то осталось висеть
+        if next(ESPObjects) ~= nil then
+            clearAllESP()
+        end
     end
-    ESPObjects = {}
-end
+end)
 
+-- ==================== AIM / SILENT / RAPID ====================
 local function isVisible(targetPart, targetModel)
     if not Settings.VisibleCheckEnabled then return true end
-
     local localChar = LocalPlayer.Character
     if not localChar then return false end
 
     local origin = Camera.CFrame.Position
     local delta = targetPart.Position - origin
-
     if delta.Magnitude > Settings.MaxTargetDistance then return false end
 
     local rayParams = RaycastParams.new()
     rayParams.FilterDescendantsInstances = {localChar, targetModel}
     rayParams.FilterType = Enum.RaycastFilterType.Exclude
-
     local ray = Workspace:Raycast(origin, delta, rayParams)
     return ray == nil
 end
@@ -645,14 +724,15 @@ local function getBestTarget(targetPartName)
     return closest
 end
 
+local WeaponConstants = nil
+local OriginalConstants = nil
+
 local function findWeaponConstants()
     if WeaponConstants then return WeaponConstants end
     for _, obj in pairs(getgc(true)) do
-        if type(obj) == "table" then
-            if obj.Constants and obj.Constants.DEFAULT_FIRERATE then
-                WeaponConstants = obj.Constants
-                return WeaponConstants
-            end
+        if type(obj) == "table" and obj.Constants and obj.Constants.DEFAULT_FIRERATE then
+            WeaponConstants = obj.Constants
+            return WeaponConstants
         end
     end
     return nil
@@ -663,17 +743,26 @@ local function setRapidFireConstants(state)
     if not constants then return end
 
     if state then
+        if not OriginalConstants then
+            OriginalConstants = {
+                DEFAULT_FIRERATE = constants.DEFAULT_FIRERATE,
+                DEFAULT_PISTOL_FIRERATE = constants.DEFAULT_PISTOL_FIRERATE,
+                DEFAULT_RELOAD_TIME = constants.DEFAULT_RELOAD_TIME,
+                DEFAULT_PISTOL_RELOAD_TIME = constants.DEFAULT_PISTOL_RELOAD_TIME,
+                DEFAULT_MAGAZINE = constants.DEFAULT_MAGAZINE,
+            }
+        end
         constants.DEFAULT_FIRERATE = 0
         constants.DEFAULT_PISTOL_FIRERATE = 0
         constants.DEFAULT_RELOAD_TIME = 0
         constants.DEFAULT_PISTOL_RELOAD_TIME = 0
         constants.DEFAULT_MAGAZINE = 999999
     else
-        constants.DEFAULT_FIRERATE = 2
-        constants.DEFAULT_PISTOL_FIRERATE = 4
-        constants.DEFAULT_RELOAD_TIME = 0.75
-        constants.DEFAULT_PISTOL_RELOAD_TIME = 0.5
-        constants.DEFAULT_MAGAZINE = 1
+        if OriginalConstants then
+            for k, v in pairs(OriginalConstants) do
+                constants[k] = v
+            end
+        end
     end
 end
 
@@ -763,7 +852,6 @@ end
 
 local function aimAt(target, dt)
     local desired = CFrame.new(Camera.CFrame.Position, target.Position)
-
     if Settings.AimSmoothness <= 0 then
         Camera.CFrame = desired
         return
@@ -801,10 +889,8 @@ end
 
 local function startAimBot()
     if aimConnection then aimConnection:Disconnect() end
-
     aimConnection = RunService.RenderStepped:Connect(function(dt)
         if not Settings.AimBotEnabled then return end
-
         local target = getBestTarget(Settings.AimPart)
         if target then
             aimAt(target, dt)
@@ -828,6 +914,7 @@ task.spawn(function()
     end
 end)
 
+-- ==================== HITBOX ====================
 local function applyHitbox(part, expand)
     if not part or not part:IsA("BasePart") then return end
 
@@ -840,12 +927,10 @@ local function applyHitbox(part, expand)
                 Massless = part.Massless,
             }
         end
-
         part.CanCollide = false
         part.Massless = true
         part.Size = OriginalHitboxes[part].Size * Settings.HitboxSize
         part.Transparency = Settings.HitboxTransparency
-
     else
         local orig = OriginalHitboxes[part]
         if orig then
@@ -892,27 +977,24 @@ task.spawn(function()
     end
 end)
 
+-- ==================== RESPAWN ====================
 local InstantRespawnEnabled = false
 local respawnConnection = nil
 local lastRespawnTime = 0
 
 local function setInstantRespawn(state)
     InstantRespawnEnabled = state
-
     if respawnConnection then
         respawnConnection:Disconnect()
         respawnConnection = nil
     end
-
     if state then
         respawnConnection = RunService.Heartbeat:Connect(function()
             local char = LocalPlayer.Character
             if not char then return end
             local humanoid = char:FindFirstChildOfClass("Humanoid")
-
             if humanoid and humanoid.Health <= 0 and (tick() - lastRespawnTime) > 0.3 then
                 lastRespawnTime = tick()
-
                 VirtualInputManager:SendKeyEvent(true, Enum.KeyCode.Space, false, game)
                 task.wait(0.01)
                 VirtualInputManager:SendKeyEvent(false, Enum.KeyCode.Space, false, game)
@@ -921,6 +1003,7 @@ local function setInstantRespawn(state)
     end
 end
 
+-- ==================== BHOP ====================
 local BHopEnabled = false
 local BHopTargetSpeed = 49
 local BHopJumpPower = 0
@@ -953,12 +1036,8 @@ local bhopConnection = RunService.Heartbeat:Connect(function()
     local humanoid = char:FindFirstChildOfClass("Humanoid")
     if not humanoid or humanoid.Health <= 0 then return end
 
-    if not originalWalkSpeed then
-        originalWalkSpeed = humanoid.WalkSpeed
-    end
-    if not originalJumpPower then
-        originalJumpPower = humanoid.JumpPower
-    end
+    if not originalWalkSpeed then originalWalkSpeed = humanoid.WalkSpeed end
+    if not originalJumpPower then originalJumpPower = humanoid.JumpPower end
 
     humanoid.WalkSpeed = BHopTargetSpeed
 
@@ -981,12 +1060,8 @@ local function setBHop(state)
         if char then
             local humanoid = char:FindFirstChildOfClass("Humanoid")
             if humanoid then
-                if originalWalkSpeed then
-                    humanoid.WalkSpeed = originalWalkSpeed
-                end
-                if originalJumpPower then
-                    humanoid.JumpPower = originalJumpPower
-                end
+                if originalWalkSpeed then humanoid.WalkSpeed = originalWalkSpeed end
+                if originalJumpPower then humanoid.JumpPower = originalJumpPower end
             end
         end
         originalWalkSpeed = nil
@@ -995,7 +1070,7 @@ local function setBHop(state)
     end
 end
 
--- [МАГНИТ (MAGNET) ЛОГИКА - HARD LOCK]
+-- ==================== MAGNET ====================
 local MagnetEnabled = false
 local MagnetTargetPlayers = true
 local MagnetTargetBots = true
@@ -1004,33 +1079,28 @@ local SavedAnchors = {}
 
 local function startMagnet()
     if MagnetConnection then MagnetConnection:Disconnect() end
-    
     MagnetConnection = RunService.RenderStepped:Connect(function()
         if not MagnetEnabled then return end
-        
         local myChar = LocalPlayer.Character
         if not myChar or not myChar:FindFirstChild("HumanoidRootPart") then return end
-        
+
         local playerSet = getPlayerCharacterSet()
         local targetPoint = Camera.CFrame.Position + (Camera.CFrame.LookVector * 10)
-        
+
         local function pullModel(model)
             if not model then return end
             local targetPart = model:FindFirstChild("Head") or model:FindFirstChild("Hitbox_Head")
             if not targetPart then return end
-            
             local hum = model:FindFirstChildOfClass("Humanoid")
             if not hum or hum.Health <= 0 then return end
-            
             if model == myChar then return end
-            
+
             if not targetPart.Anchored then
                 targetPart.Anchored = true
                 SavedAnchors[targetPart] = true
             end
-            
             targetPart.CFrame = CFrame.new(targetPoint, targetPoint + Camera.CFrame.LookVector)
-            
+
             local root = model:FindFirstChild("HumanoidRootPart")
             if root then
                 if not root.Anchored then
@@ -1062,13 +1132,12 @@ end
 local function stopMagnet()
     if MagnetConnection then MagnetConnection:Disconnect() end
     for part, _ in pairs(SavedAnchors) do
-        if part and part.Parent then
-            part.Anchored = false
-        end
+        if part and part.Parent then part.Anchored = false end
     end
     SavedAnchors = {}
 end
 
+-- ==================== KILL SOUND ====================
 local KillSoundEnabled = false
 local killSoundConnection = nil
 
@@ -1089,20 +1158,14 @@ myHeadshotSound.Parent = SoundService
 
 local function handleNewSound(sound)
     if not sound:IsA("Sound") then return end
-
-    local isKill = string.find(sound.SoundId, ORIGINAL_KILL_ID)
-    local isHeadshot = string.find(sound.SoundId, ORIGINAL_HEADSHOT_ID)
+    local isKill = string.find(sound.SoundId, ORIGINAL_KILL_ID, 1, true)
+    local isHeadshot = string.find(sound.SoundId, ORIGINAL_HEADSHOT_ID, 1, true)
 
     if isKill or isHeadshot then
         sound.Volume = 0
         sound.Playing = false
-
-        if isKill then
-            myKillSound:Play()
-        elseif isHeadshot then
-            myHeadshotSound:Play()
-        end
-
+        if isKill then myKillSound:Play()
+        elseif isHeadshot then myHeadshotSound:Play() end
         task.delay(1, function()
             if sound and sound.Parent then sound:Destroy() end
         end)
@@ -1111,16 +1174,14 @@ end
 
 local function setKillSound(state)
     KillSoundEnabled = state
-
     if killSoundConnection then
         killSoundConnection:Disconnect()
         killSoundConnection = nil
     end
-
     if state then
         killSoundConnection = game.DescendantAdded:Connect(function(obj)
             if obj:IsA("Sound") then
-                spawn(function()
+                task.spawn(function()
                     task.wait(0.01)
                     handleNewSound(obj)
                 end)
@@ -1129,6 +1190,7 @@ local function setKillSound(state)
     end
 end
 
+-- ==================== UI ====================
 local CombatTab = Window:MakeTab({ Name = "COMBAT", Icon = "rbxassetid://4483345998" })
 
 local CommonSection = CombatTab:AddSection({ Name = "General Settings" })
@@ -1147,170 +1209,61 @@ SilentSection:AddToggle({ Name = "Enable Silent Aim", Default = false, Callback 
 SilentSection:AddDropdown({ Name = "Silent Target Part", Default = "Hitbox_Head", Options = {"Hitbox_Head", "Head", "HumanoidRootPart"}, Callback = function(o) Settings.SilentPart = o end })
 
 local RapidSection = CombatTab:AddSection({ Name = "Rapid Fire Settings" })
-RapidSection:AddToggle({ Name = "Rapid Fire (Constants)", Default = false, Callback = function(s) Settings.RapidFireConstantsEnabled = s; setRapidFireConstants(s) end })
-RapidSection:AddToggle({ Name = "Multi-Bullet Spam (Hook)", Default = false, Callback = function(s) Settings.RapidFireSpamEnabled = s end })
-RapidSection:AddToggle({ Name = "Ultra Animations (Bolt)", Default = false, Callback = function(s) Settings.UltraAnimations = s end })
-RapidSection:AddSlider({ Name = "Bullets Per Shot (Spam)", Min = 1, Max = 50, Default = 10, Increment = 1, Callback = function(v) Settings.BulletsPerShot = v end })
+RapidSection:AddToggle({ Name = "Rapid Fire", Default = false, Callback = function(s) Settings.RapidFireConstantsEnabled = s; setRapidFireConstants(s) end })
+RapidSection:AddToggle({ Name = "Multi-Bullet Spam", Default = false, Callback = function(s) Settings.RapidFireSpamEnabled = s end })
+RapidSection:AddToggle({ Name = "Ultra Animations", Default = false, Callback = function(s) Settings.UltraAnimations = s end })
+RapidSection:AddSlider({ Name = "Bullets Per Shot", Min = 1, Max = 50, Default = 10, Increment = 1, Callback = function(v) Settings.BulletsPerShot = v end })
 
+-- ESP TAB
 local ESPTab = Window:MakeTab({ Name = "ESP", Icon = "rbxassetid://3947051614" })
 local ESPSection = ESPTab:AddSection({ Name = "ESP Settings" })
 
 ESPSection:AddToggle({ Name = "Enable ESP", Default = false, Callback = function(s)
     Settings.ESPEnabled = s
-    if s then
-        updateESP()
-        task.spawn(function()
-            while Settings.ESPEnabled do
-                task.wait(1)
-                updateESP()
-            end
-        end)
-    else
-        clearAllESP()
-    end
+    if not s then clearAllESP() end
 end })
+
+ESPSection:AddToggle({ Name = "Boxes", Default = false, Callback = function(s) Settings.ESPBoxes = s end })
+ESPSection:AddToggle({ Name = "Tracers", Default = false, Callback = function(s) Settings.ESPTracers = s end })
+ESPSection:AddToggle({ Name = "Names", Default = false, Callback = function(s) Settings.ESPNames = s end })
+ESPSection:AddToggle({ Name = "Distance", Default = false, Callback = function(s) Settings.ESPDistance = s end })
+ESPSection:AddToggle({ Name = "Health Bar", Default = false, Callback = function(s) Settings.ESPHealth = s end })
+ESPSection:AddToggle({ Name = "Skeleton", Default = false, Callback = function(s) Settings.ESPSkeleton = s end })
+
+ESPSection:AddDropdown({ Name = "Tracer Origin", Default = "Bottom", Options = {"Bottom", "Mouse", "Center"}, Callback = function(o) Settings.ESPTracerOrigin = o end })
+ESPSection:AddSlider({ Name = "Max ESP Distance", Min = 100, Max = 5000, Default = 1000, Increment = 100, Callback = function(v) Settings.ESPMaxDistance = v end })
+ESPSection:AddSlider({ Name = "Text Size", Min = 10, Max = 24, Default = 14, Increment = 1, Callback = function(v) Settings.ESPTextSize = v end })
 
 ESPSection:AddColorpicker({ Name = "ESP Color", Default = Color3.fromRGB(255, 0, 0), Callback = function(c)
     Settings.ESPColor = c
-    for model, highlight in pairs(ESPObjects) do
-        if highlight and highlight.Parent then
-            highlight.FillColor = c
-            highlight.OutlineColor = c
+    for model, entry in pairs(ESPObjects) do
+        if entry.highlight and entry.highlight.Parent then
+            entry.highlight.FillColor = c
+            entry.highlight.OutlineColor = c
         end
     end
 end })
 
--- ВКЛАДКА VISUAL
+-- VISUAL TAB
 local VisualTab = Window:MakeTab({ Name = "VISUAL", Icon = "rbxassetid://4483345998" })
 
--- Night Mode
 local VisualSection = VisualTab:AddSection({ Name = "Night Mode Settings" })
+VisualSection:AddToggle({ Name = "Enable Night Mode", Default = false, Callback = function(s) Settings.NightModeEnabled = s; updateNightMode(s) end })
+VisualSection:AddSlider({ Name = "Night Intensity (Brightness)", Min = -1.0, Max = 0.0, Default = -0.2, Increment = 0.05, Callback = function(v) Settings.NightIntensity = v; nightModeCC.Brightness = v end })
+VisualSection:AddSlider({ Name = "Night Saturation", Min = -1.0, Max = 1.0, Default = -0.3, Increment = 0.05, Callback = function(v) Settings.NightSaturation = v; nightModeCC.Saturation = v end })
+VisualSection:AddColorpicker({ Name = "Night Tint Color", Default = Color3.fromRGB(100, 120, 180), Callback = function(c) Settings.NightTint = c; nightModeCC.TintColor = c end })
 
-VisualSection:AddToggle({
-    Name = "Enable Night Mode",
-    Default = false,
-    Callback = function(s)
-        Settings.NightModeEnabled = s
-        updateNightMode(s)
-    end
-})
-
-VisualSection:AddSlider({
-    Name = "Night Intensity (Brightness)",
-    Min = -1.0, Max = 0.0, Default = -0.2, Increment = 0.05,
-    Callback = function(v)
-        Settings.NightIntensity = v
-        nightModeCC.Brightness = v
-    end
-})
-
-VisualSection:AddSlider({
-    Name = "Night Saturation",
-    Min = -1.0, Max = 1.0, Default = -0.3, Increment = 0.05,
-    Callback = function(v)
-        Settings.NightSaturation = v
-        nightModeCC.Saturation = v
-    end
-})
-
-VisualSection:AddColorpicker({
-    Name = "Night Tint Color",
-    Default = Color3.fromRGB(100, 120, 180),
-    Callback = function(c)
-        Settings.NightTint = c
-        nightModeCC.TintColor = c
-    end
-})
-
--- Weather Changer
 local WeatherSection = VisualTab:AddSection({ Name = "Weather Changer" })
-WeatherSection:AddDropdown({
-    Name = "Select Weather",
-    Default = "None",
-    Options = {"None", "Rain", "Snow"},
-    Callback = function(option)
-        setWeather(option)
-    end
-})
+WeatherSection:AddDropdown({ Name = "Select Weather", Default = "None", Options = {"None", "Rain", "Snow"}, Callback = function(option) setWeather(option) end })
 
--- Time Changer
 local TimeSection = VisualTab:AddSection({ Name = "Time Changer" })
-TimeSection:AddDropdown({
-    Name = "Select Time",
-    Default = "None",
-    Options = {"None", "Morning", "Day", "Evening", "Night"},
-    Callback = function(option)
-        setTimeOfDay(option)
-    end
-})
+TimeSection:AddDropdown({ Name = "Select Time", Default = "None", Options = {"None", "Morning", "Day", "Evening", "Night"}, Callback = function(option) setTimeOfDay(option) end })
 
--- Fog Changer
 local FogSection = VisualTab:AddSection({ Name = "Fog Changer" })
-FogSection:AddSlider({
-    Name = "Fog Distance (End)",
-    Min = 100, Max = 5000, Default = 1000, Increment = 100,
-    Callback = function(v)
-        Settings.FogEnd = v
-        setFog()
-    end
-})
-FogSection:AddColorpicker({
-    Name = "Fog Color",
-    Default = Color3.fromRGB(192, 192, 192),
-    Callback = function(c)
-        Settings.FogColor = c
-        setFog()
-    end
-})
+FogSection:AddSlider({ Name = "Fog Distance (End)", Min = 100, Max = 5000, Default = 1000, Increment = 100, Callback = function(v) Settings.FogEnd = v; setFog() end })
+FogSection:AddColorpicker({ Name = "Fog Color", Default = Color3.fromRGB(192, 192, 192), Callback = function(c) Settings.FogColor = c; setFog() end })
 
--- HALLOWEEN
-local HalloweenSection = VisualTab:AddSection({ Name = "Halloween Vibe" })
-
-HalloweenSection:AddToggle({
-    Name = "Enable Halloween Mode",
-    Default = false,
-    Callback = function(s) updateHalloween(s) end
-})
-
-HalloweenSection:AddSlider({
-    Name = "Intensity",
-    Min = 0.0, Max = 2.0, Default = 0.6, Increment = 0.1,
-    Callback = function(v) Settings.HalloweenIntensity = v end
-})
-
-HalloweenSection:AddColorpicker({
-    Name = "Halloween Tint",
-    Default = Color3.fromRGB(255, 90, 0),
-    Callback = function(c) Settings.HalloweenTint = c end
-})
-
-HalloweenSection:AddToggle({
-    Name = "Floating Pumpkins",
-    Default = false,
-    Callback = function(s)
-        Settings.PumpkinsEnabled = s
-        if not s then clearPumpkins() end
-    end
-})
-
-HalloweenSection:AddToggle({
-    Name = "Bats Swarm",
-    Default = false,
-    Callback = function(s)
-        Settings.BatsEnabled = s
-        if not s then clearBats() end
-    end
-})
-
-HalloweenSection:AddToggle({
-    Name = "Vignette (Dark Corners)",
-    Default = false,
-    Callback = function(s)
-        Settings.VignetteEnabled = s
-        halloweenVignette.Visible = s and Settings.HalloweenEnabled
-    end
-})
-
+-- MISC TAB
 local MiscTab = Window:MakeTab({ Name = "MISC", Icon = "rbxassetid://4483345998" })
 
 local BHopSection = MiscTab:AddSection({ Name = "BunnyHop" })
@@ -1318,64 +1271,23 @@ BHopSection:AddToggle({ Name = "Enable BunnyHop", Default = false, Callback = fu
 BHopSection:AddSlider({ Name = "Max Speed", Min = 10, Max = 100, Default = 49, Increment = 1, Callback = function(v) BHopTargetSpeed = v end })
 BHopSection:AddSlider({ Name = "Jump Power (0 = Normal)", Min = 0, Max = 200, Default = 0, Increment = 5, Callback = function(v) BHopJumpPower = v end })
 
--- СЕКЦИЯ: MAGNET
 local MagnetSection = MiscTab:AddSection({ Name = "Magnet (Hard Lock)" })
-
-MagnetSection:AddToggle({ 
-    Name = "Enable Magnet", 
-    Default = false, 
-    Callback = function(s) 
-        MagnetEnabled = s 
-        if s then startMagnet() else stopMagnet() end
-    end 
-})
-
-MagnetSection:AddToggle({ 
-    Name = "Target Players", 
-    Default = true, 
-    Callback = function(s) MagnetTargetPlayers = s end 
-})
-
-MagnetSection:AddToggle({ 
-    Name = "Target Bots", 
-    Default = true, 
-    Callback = function(s) MagnetTargetBots = s end 
-})
+MagnetSection:AddToggle({ Name = "Enable Magnet", Default = false, Callback = function(s) MagnetEnabled = s; if s then startMagnet() else stopMagnet() end end })
+MagnetSection:AddToggle({ Name = "Target Players", Default = true, Callback = function(s) MagnetTargetPlayers = s end })
+MagnetSection:AddToggle({ Name = "Target Bots", Default = true, Callback = function(s) MagnetTargetBots = s end })
 
 local HitboxSection = MiscTab:AddSection({ Name = "Hitbox Expander" })
-HitboxSection:AddToggle({
-    Name = "Enable Hitbox Expander",
-    Default = false,
-    Callback = function(s)
-        Settings.HitboxEnabled = s
-        if not s then restoreAllHitboxes() end
-    end
-})
-HitboxSection:AddSlider({
-    Name = "Head Size",
-    Min = 5.0, Max = 30.0, Default = 10.0, Increment = 1.0,
-    Callback = function(v) Settings.HitboxSize = v end
-})
-HitboxSection:AddSlider({
-    Name = "Transparency",
-    Min = 0.0, Max = 1.0, Default = 0.7, Increment = 0.1,
-    Callback = function(v) Settings.HitboxTransparency = v end
-})
+HitboxSection:AddToggle({ Name = "Enable Hitbox Expander", Default = false, Callback = function(s) Settings.HitboxEnabled = s; if not s then restoreAllHitboxes() end end })
+HitboxSection:AddSlider({ Name = "Head Size", Min = 5.0, Max = 30.0, Default = 10.0, Increment = 1.0, Callback = function(v) Settings.HitboxSize = v end })
+HitboxSection:AddSlider({ Name = "Transparency", Min = 0.0, Max = 1.0, Default = 0.7, Increment = 0.1, Callback = function(v) Settings.HitboxTransparency = v end })
 
 local RespawnSection = MiscTab:AddSection({ Name = "Respawn" })
-RespawnSection:AddToggle({
-    Name = "Instant Respawn",
-    Default = false,
-    Callback = function(s) setInstantRespawn(s) end
-})
+RespawnSection:AddToggle({ Name = "Instant Respawn", Default = false, Callback = function(s) setInstantRespawn(s) end })
 
 local SoundSection = MiscTab:AddSection({ Name = "Kill Sound" })
-SoundSection:AddToggle({
-    Name = "Enable Kill Sound",
-    Default = false,
-    Callback = function(s) setKillSound(s) end
-})
+SoundSection:AddToggle({ Name = "Enable Kill Sound", Default = false, Callback = function(s) setKillSound(s) end })
 
+-- SETTINGS TAB
 local SettingsTab = Window:MakeTab({ Name = "SETTINGS", Icon = "rbxassetid://6031094667" })
 local SettingsSection = SettingsTab:AddSection({ Name = "Actions" })
 
@@ -1403,19 +1315,8 @@ SettingsSection:AddButton({ Name = "UNLOAD SCRIPT", Callback = function()
     updateNightMode(false)
     setWeather("None")
     setTimeOfDay("None")
-    
-    Settings.HalloweenEnabled = false
-    Settings.PumpkinsEnabled = false
-    Settings.BatsEnabled = false
-    Settings.VignetteEnabled = false
-    clearPumpkins()
-    clearBats()
 
     if nightModeCC then nightModeCC:Destroy() end
-    if halloweenCC then halloweenCC:Destroy() end
-    if halloweenBlur then halloweenBlur:Destroy() end
-    if halloweenVignette then halloweenVignette:Destroy() end
-    if halloweenFolder then halloweenFolder:Destroy() end
     if sky then sky:Destroy() end
     if sunRays then sunRays:Destroy() end
     if weatherFolder then weatherFolder:Destroy() end
@@ -1429,9 +1330,7 @@ SettingsSection:AddButton({ Name = "UNLOAD SCRIPT", Callback = function()
 
     if LocalPlayer.Character then
         local hum = LocalPlayer.Character:FindFirstChildOfClass("Humanoid")
-        if hum and originalJumpPower then
-            hum.JumpPower = originalJumpPower
-        end
+        if hum and originalJumpPower then hum.JumpPower = originalJumpPower end
     end
 
     if bhopConnection then bhopConnection:Disconnect() end
